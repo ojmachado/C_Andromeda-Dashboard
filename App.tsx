@@ -125,6 +125,8 @@ export default function App() {
       <Route path="/integrations" element={<IntegrationsPage />} />
       <Route path="/w/:workspaceId/setup" element={<WizardPage workspaces={workspaces} setWorkspaces={setWorkspaces} />} />
       <Route path="/w/:workspaceId/dashboard" element={<DashboardPage workspaces={workspaces} />} />
+      {/* New Route for Details */}
+      <Route path="/w/:workspaceId/details/:level/:objectId" element={<AdDetailsPage workspaces={workspaces} />} />
       <Route path="/admin/setup-meta" element={<AdminSetupPage />} />
     </Routes>
   );
@@ -691,6 +693,194 @@ const WizardPage = ({ workspaces, setWorkspaces }: { workspaces: Workspace[], se
   );
 };
 
+// --- NEW COMPONENT: AD DETAILS PAGE ---
+const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
+    const { workspaceId, level, objectId } = useParams();
+    const [adData, setAdData] = useState<any>(null);
+    const [creativeData, setCreativeData] = useState<any>(null);
+    const [insights, setInsights] = useState<any>(null);
+    const [loading, setLoading] = useState(true);
+    const [objectiveFilter, setObjectiveFilter] = useState('');
+
+    useEffect(() => {
+        const fetchDetails = async () => {
+            const token = await SecureKV.getWorkspaceToken(workspaceId!);
+            if (!token || !window.FB) return;
+
+            setLoading(true);
+
+            // Fetch Basic Object Data & Campaign Objective
+            // If level is 'ad', we fetch ad details + campaign objective + creative
+            if (level === 'ad') {
+                window.FB.api(
+                    `/${objectId}`,
+                    'GET',
+                    { 
+                        fields: 'name,campaign{objective,name},creative{thumbnail_url,image_url,video_url,object_story_spec,object_type}',
+                        access_token: token 
+                    },
+                    (response: any) => {
+                        if (response && !response.error) {
+                            setAdData(response);
+                            setObjectiveFilter(response.campaign?.objective || '');
+                            
+                            // Handle Creative Data normalization
+                            const creative = response.creative;
+                            if (creative) {
+                                let videoUrl = creative.video_url;
+                                let imageUrl = creative.image_url || creative.thumbnail_url;
+                                
+                                // Deep dive for video data if not at top level
+                                if (!videoUrl && creative.object_story_spec?.video_data?.file_url) {
+                                    videoUrl = creative.object_story_spec.video_data.file_url;
+                                }
+                                if (!imageUrl && creative.object_story_spec?.video_data?.image_url) {
+                                    imageUrl = creative.object_story_spec.video_data.image_url;
+                                }
+
+                                setCreativeData({
+                                    videoUrl,
+                                    imageUrl,
+                                    type: videoUrl ? 'VIDEO' : 'IMAGE'
+                                });
+                            }
+                        }
+                    }
+                );
+            } else {
+                // Placeholder for other levels if needed in future
+                setAdData({ name: 'Detalhes indisponíveis para este nível' });
+            }
+
+            // Fetch Insights
+            window.FB.api(
+                `/${objectId}/insights`,
+                'GET',
+                {
+                    fields: 'spend,impressions,clicks,ctr,cpm,cpc,actions,purchase_roas',
+                    date_preset: 'maximum',
+                    access_token: token
+                },
+                (response: any) => {
+                    if (response && !response.error && response.data.length > 0) {
+                        setInsights(response.data[0]);
+                    }
+                    setLoading(false);
+                }
+            );
+        };
+
+        fetchDetails();
+    }, [workspaceId, objectId, level]);
+
+    const formatCurrency = (val: string) => parseFloat(val || '0').toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const formatNumber = (val: string) => parseInt(val || '0').toLocaleString('pt-BR');
+
+    return (
+        <AppShell workspaces={workspaces}>
+            <div className="max-w-7xl mx-auto py-8 px-6">
+                {/* Header & Filter */}
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+                    <div>
+                        <div className="flex items-center gap-2 text-text-secondary text-sm mb-1">
+                            <Link to={`/w/${workspaceId}/dashboard`} className="hover:text-white">Dashboard</Link>
+                            <span>/</span>
+                            <span>Detalhes do Anúncio</span>
+                        </div>
+                        <h1 className="text-3xl font-black text-white">{loading ? 'Carregando...' : adData?.name}</h1>
+                        {adData?.campaign && <span className="text-sm text-text-secondary">Campanha: {adData.campaign.name}</span>}
+                    </div>
+
+                    <div className="bg-card-dark p-1 rounded-lg border border-border-dark flex items-center gap-2 px-3">
+                        <span className="text-xs font-bold text-text-secondary uppercase">Objetivo da Campanha</span>
+                        <div className="h-6 w-px bg-border-dark mx-1"></div>
+                        <select 
+                            value={objectiveFilter} 
+                            onChange={(e) => setObjectiveFilter(e.target.value)}
+                            className="bg-transparent text-white text-sm font-bold focus:outline-none cursor-pointer"
+                        >
+                            <option value={objectiveFilter}>{objectiveFilter || 'Carregando...'}</option>
+                            <option value="OUTCOME_SALES">OUTCOME_SALES</option>
+                            <option value="OUTCOME_LEADS">OUTCOME_LEADS</option>
+                            <option value="OUTCOME_TRAFFIC">OUTCOME_TRAFFIC</option>
+                            <option value="OUTCOME_AWARENESS">OUTCOME_AWARENESS</option>
+                            <option value="OUTCOME_ENGAGEMENT">OUTCOME_ENGAGEMENT</option>
+                            <option value="OUTCOME_APP_PROMOTION">OUTCOME_APP_PROMOTION</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    {/* Left Column: Creative Preview */}
+                    <div className="lg:col-span-1 space-y-6">
+                        <Card className="overflow-hidden bg-black border-border-dark shadow-2xl">
+                            <div className="p-4 border-b border-white/10 flex justify-between items-center">
+                                <h3 className="font-bold text-white text-sm">Criativo do Anúncio</h3>
+                                <Badge variant={creativeData?.type === 'VIDEO' ? 'info' : 'gray'}>
+                                    {creativeData?.type === 'VIDEO' ? 'Vídeo' : 'Imagem'}
+                                </Badge>
+                            </div>
+                            <div className="aspect-square bg-black flex items-center justify-center relative">
+                                {loading ? (
+                                    <Skeleton className="w-full h-full" />
+                                ) : creativeData ? (
+                                    creativeData.type === 'VIDEO' ? (
+                                        <video 
+                                            src={creativeData.videoUrl} 
+                                            controls 
+                                            className="w-full h-full object-contain" 
+                                            poster={creativeData.imageUrl}
+                                        />
+                                    ) : (
+                                        <img 
+                                            src={creativeData.imageUrl} 
+                                            alt="Ad Creative" 
+                                            className="w-full h-full object-contain" 
+                                        />
+                                    )
+                                ) : (
+                                    <div className="text-text-secondary text-sm flex flex-col items-center gap-2">
+                                        <span className="material-symbols-outlined text-3xl">image_not_supported</span>
+                                        Preview indisponível
+                                    </div>
+                                )}
+                            </div>
+                        </Card>
+                    </div>
+
+                    {/* Right Column: Detailed Metrics */}
+                    <div className="lg:col-span-2 space-y-6">
+                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            {[
+                                { label: 'Valor Gasto', value: formatCurrency(insights?.spend), color: 'emerald' },
+                                { label: 'Impressões', value: formatNumber(insights?.impressions), color: 'primary' },
+                                { label: 'Cliques', value: formatNumber(insights?.clicks), color: 'blue' },
+                                { label: 'CTR', value: `${parseFloat(insights?.ctr || 0).toFixed(2)}%`, color: 'indigo' },
+                                { label: 'CPM', value: `R$ ${parseFloat(insights?.cpm || 0).toFixed(2)}`, color: 'purple' },
+                                { label: 'CPC', value: `R$ ${parseFloat(insights?.cpc || 0).toFixed(2)}`, color: 'pink' },
+                                { label: 'ROAS', value: insights?.purchase_roas ? parseFloat(insights.purchase_roas[0].value).toFixed(2) : '0.00', color: 'amber' },
+                                { label: 'Vendas', value: insights?.actions ? (insights.actions.find((a:any) => a.action_type === 'purchase')?.value || 0) : 0, color: 'rose' },
+                            ].map((k, i) => (
+                                <Card key={i} className="p-4 hover:border-primary/50 transition-colors">
+                                    <p className="text-xs text-text-secondary uppercase font-bold mb-1">{k.label}</p>
+                                    {loading ? <Skeleton className="h-6 w-20" /> : <p className={`text-xl font-bold text-${k.color === 'emerald' ? 'emerald-400' : 'white'}`}>{k.value}</p>}
+                                </Card>
+                            ))}
+                         </div>
+                         
+                         <Card className="p-6 min-h-[300px]">
+                            <h3 className="text-white font-bold mb-4">Análise de Performance (Simulado)</h3>
+                            <div className="w-full h-64 bg-background-dark/50 rounded-lg flex items-center justify-center border border-dashed border-border-dark text-text-secondary">
+                                <span className="text-sm">Gráficos detalhados seriam renderizados aqui para o ID: {objectId}</span>
+                            </div>
+                         </Card>
+                    </div>
+                </div>
+            </div>
+        </AppShell>
+    );
+};
+
 const DashboardPage = ({ workspaces }: { workspaces: Workspace[] }) => {
     const { workspaceId } = useParams();
     const navigate = useNavigate();
@@ -701,9 +891,15 @@ const DashboardPage = ({ workspaces }: { workspaces: Workspace[] }) => {
     const [isConnected, setIsConnected] = useState(false);
     
     // Filters State
-    const [timeRange, setTimeRange] = useState<'last_7d' | 'last_30d'>('last_30d');
+    const [dateMode, setDateMode] = useState<'preset' | 'custom'>('preset');
+    const [timeRange, setTimeRange] = useState<'last_7d' | 'last_30d' | 'this_month' | 'last_month'>('last_30d');
+    const [customDates, setCustomDates] = useState({ start: '', end: '' });
     const [level, setLevel] = useState<'campaign' | 'adset' | 'ad'>('campaign');
     
+    // UI State for Custom Date Modal
+    const [isCustomDateModalOpen, setIsCustomDateModalOpen] = useState(false);
+    const [tempCustomDates, setTempCustomDates] = useState({ start: '', end: '' });
+
     // Data State
     const [tableData, setTableData] = useState<any[]>([]);
     const [kpi, setKpi] = useState({ spend: 0, impressions: 0, clicks: 0, ctr: 0, cpm: 0, cpc: 0, roas: 0, sales: 0 });
@@ -736,6 +932,9 @@ const DashboardPage = ({ workspaces }: { workspaces: Workspace[] }) => {
     // Data Fetching
     useEffect(() => {
         if (!isConnected || !adAccountId) return;
+        
+        // Prevent fetching if custom mode is active but dates are missing
+        if (dateMode === 'custom' && (!customDates.start || !customDates.end)) return;
 
         const fetchData = async () => {
             setLoading(true);
@@ -759,18 +958,27 @@ const DashboardPage = ({ workspaces }: { workspaces: Workspace[] }) => {
             if (level === 'adset') nameField = 'adset_name';
             if (level === 'ad') nameField = 'ad_name';
 
-            const fields = `${nameField},spend,impressions,clicks,ctr,cpm,cpc,purchase_roas,actions`;
+            // IMPORTANT: Added 'id' to fields to allow linking
+            const fields = `id,${nameField},spend,impressions,clicks,ctr,cpm,cpc,purchase_roas,actions`;
+
+            const params: any = {
+                level: level,
+                fields: fields,
+                access_token: token,
+                limit: 50
+            };
+
+            // Apply Date Logic
+            if (dateMode === 'custom') {
+                params.time_range = JSON.stringify({ since: customDates.start, until: customDates.end });
+            } else {
+                params.date_preset = timeRange;
+            }
 
             window.FB.api(
                 `/${adAccountId}/insights`,
                 'GET',
-                {
-                    level: level,
-                    date_preset: timeRange,
-                    fields: fields,
-                    access_token: token,
-                    limit: 50
-                },
+                params,
                 (response: any) => {
                     setLoading(false);
                     if (response && !response.error) {
@@ -811,8 +1019,9 @@ const DashboardPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                             totalSales += sales;
 
                             return {
+                                id: row.id || row.campaign_id || row.adset_id || row.ad_id, // ID fallback
                                 name: row[nameField] || 'Sem Nome',
-                                status: 'active', // Insights endpoint doesn't return status, usually campaigns endpoint does. Keeping placeholder.
+                                status: 'active', 
                                 spend,
                                 sales,
                                 roas,
@@ -828,9 +1037,6 @@ const DashboardPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                         const aggCtr = totalImpr > 0 ? (totalClicks / totalImpr) * 100 : 0;
                         const aggCpc = totalClicks > 0 ? totalSpend / totalClicks : 0;
                         const aggCpm = totalImpr > 0 ? (totalSpend / totalImpr) * 1000 : 0;
-                        // Approximate total ROAS calculation if not provided by API aggregates
-                        // Here assuming row roas * spend weighted average is complex, so simpler approach or fetch aggregate
-                        // For MVP, letting totalRoas be 0 or derived if we had value.
                         
                         setKpi({
                             spend: totalSpend,
@@ -840,7 +1046,7 @@ const DashboardPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                             ctr: aggCtr,
                             cpm: aggCpm,
                             cpc: aggCpc,
-                            roas: 0 // Placeholder or needs action_values sum
+                            roas: 0 
                         });
 
                         setTableData(rows);
@@ -853,7 +1059,20 @@ const DashboardPage = ({ workspaces }: { workspaces: Workspace[] }) => {
         };
 
         fetchData();
-    }, [adAccountId, isConnected, timeRange, level, workspaceId]);
+    }, [adAccountId, isConnected, timeRange, dateMode, customDates, level, workspaceId]);
+
+    const handleApplyCustomDates = () => {
+        if (tempCustomDates.start && tempCustomDates.end) {
+            setCustomDates(tempCustomDates);
+            setDateMode('custom');
+            setIsCustomDateModalOpen(false);
+        }
+    };
+
+    const handlePresetClick = (preset: 'last_7d' | 'last_30d' | 'this_month' | 'last_month') => {
+        setDateMode('preset');
+        setTimeRange(preset);
+    };
 
 
   return (
@@ -911,16 +1130,34 @@ const DashboardPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                     <div className="flex flex-wrap items-center gap-3">
                         <div className="flex bg-card-dark rounded-lg p-1 border border-border-dark">
                             <button 
-                                onClick={() => setTimeRange('last_7d')}
-                                className={`px-3 py-1.5 rounded text-xs sm:text-sm font-medium transition-colors ${timeRange === 'last_7d' ? 'bg-primary text-white shadow-sm' : 'text-text-secondary hover:text-white'}`}
+                                onClick={() => handlePresetClick('last_7d')}
+                                className={`px-3 py-1.5 rounded text-xs sm:text-sm font-medium transition-colors ${dateMode === 'preset' && timeRange === 'last_7d' ? 'bg-primary text-white shadow-sm' : 'text-text-secondary hover:text-white'}`}
                             >
                                 7d
                             </button>
                             <button 
-                                onClick={() => setTimeRange('last_30d')}
-                                className={`px-3 py-1.5 rounded text-xs sm:text-sm font-medium transition-colors ${timeRange === 'last_30d' ? 'bg-primary text-white shadow-sm' : 'text-text-secondary hover:text-white'}`}
+                                onClick={() => handlePresetClick('last_30d')}
+                                className={`px-3 py-1.5 rounded text-xs sm:text-sm font-medium transition-colors ${dateMode === 'preset' && timeRange === 'last_30d' ? 'bg-primary text-white shadow-sm' : 'text-text-secondary hover:text-white'}`}
                             >
                                 30d
+                            </button>
+                            <button 
+                                onClick={() => handlePresetClick('this_month')}
+                                className={`px-3 py-1.5 rounded text-xs sm:text-sm font-medium transition-colors ${dateMode === 'preset' && timeRange === 'this_month' ? 'bg-primary text-white shadow-sm' : 'text-text-secondary hover:text-white'}`}
+                            >
+                                Mês Atual
+                            </button>
+                            <button 
+                                onClick={() => handlePresetClick('last_month')}
+                                className={`px-3 py-1.5 rounded text-xs sm:text-sm font-medium transition-colors ${dateMode === 'preset' && timeRange === 'last_month' ? 'bg-primary text-white shadow-sm' : 'text-text-secondary hover:text-white'}`}
+                            >
+                                Mês Anterior
+                            </button>
+                            <button 
+                                onClick={() => setIsCustomDateModalOpen(true)}
+                                className={`px-3 py-1.5 rounded text-xs sm:text-sm font-medium transition-colors ${dateMode === 'custom' ? 'bg-primary text-white shadow-sm' : 'text-text-secondary hover:text-white'}`}
+                            >
+                                {dateMode === 'custom' ? 'Customizado' : 'Custom'}
                             </button>
                         </div>
                         <div className="flex bg-card-dark rounded-lg p-1 border border-border-dark">
@@ -1034,7 +1271,18 @@ const DashboardPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                                 ) : (
                                     tableData.map((c, i) => (
                                         <tr key={i} className="hover:bg-border-dark/20 transition-colors cursor-pointer group">
-                                            <td className="px-6 py-4 font-medium text-white group-hover:text-primary transition-colors">{c.name}</td>
+                                            <td className="px-6 py-4 font-medium text-white group-hover:text-primary transition-colors">
+                                                {/* Updated Link to New Tab Details */}
+                                                <Link 
+                                                    to={`/w/${workspaceId}/details/${level}/${c.id}`} 
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="hover:underline flex items-center gap-1"
+                                                >
+                                                    {c.name}
+                                                    <span className="material-symbols-outlined text-xs opacity-50">open_in_new</span>
+                                                </Link>
+                                            </td>
                                             <td className="px-6 py-4 text-right text-white tabular-nums">R$ {c.spend.toLocaleString('pt-BR', { minimumFractionDigits: 2})}</td>
                                             <td className="px-6 py-4 text-right text-white tabular-nums">{c.sales}</td>
                                             <td className="px-6 py-4 text-right text-white tabular-nums">{c.impressions.toLocaleString()}</td>
@@ -1060,6 +1308,43 @@ const DashboardPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                     </div>
                 )}
             </div>
+
+            {/* Custom Date Modal */}
+            <Modal 
+                isOpen={isCustomDateModalOpen} 
+                onClose={() => setIsCustomDateModalOpen(false)}
+                title="Selecionar Período Customizado"
+                footer={
+                    <>
+                        <Button variant="ghost" onClick={() => setIsCustomDateModalOpen(false)}>Cancelar</Button>
+                        <Button onClick={handleApplyCustomDates} disabled={!tempCustomDates.start || !tempCustomDates.end}>Aplicar Filtro</Button>
+                    </>
+                }
+            >
+                <div className="space-y-4">
+                    <p className="text-text-secondary text-sm">Selecione o intervalo de datas para análise:</p>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="flex flex-col gap-2">
+                            <label className="text-xs font-bold text-white uppercase tracking-wider">Data Início</label>
+                            <input 
+                                type="date" 
+                                className="bg-background-dark border border-border-dark rounded-lg p-3 text-white focus:ring-1 focus:ring-primary focus:border-primary outline-none text-sm"
+                                value={tempCustomDates.start}
+                                onChange={(e) => setTempCustomDates(prev => ({...prev, start: e.target.value}))}
+                            />
+                        </div>
+                        <div className="flex flex-col gap-2">
+                            <label className="text-xs font-bold text-white uppercase tracking-wider">Data Fim</label>
+                            <input 
+                                type="date" 
+                                className="bg-background-dark border border-border-dark rounded-lg p-3 text-white focus:ring-1 focus:ring-primary focus:border-primary outline-none text-sm"
+                                value={tempCustomDates.end}
+                                onChange={(e) => setTempCustomDates(prev => ({...prev, end: e.target.value}))}
+                            />
+                        </div>
+                    </div>
+                </div>
+            </Modal>
         </div>
     </div>
   );
