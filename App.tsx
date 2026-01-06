@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Routes, Route, useNavigate, useParams, Navigate, Link } from 'react-router-dom';
 import { AppShell, Stepper } from './components/Navigation.js';
 import { Button, Card, Badge, Modal, Skeleton } from './components/UI.js';
@@ -693,6 +693,15 @@ const WizardPage = ({ workspaces, setWorkspaces }: { workspaces: Workspace[], se
   );
 };
 
+const ALL_OBJECTIVES = [
+    'OUTCOME_SALES',
+    'OUTCOME_LEADS',
+    'OUTCOME_TRAFFIC',
+    'OUTCOME_AWARENESS',
+    'OUTCOME_ENGAGEMENT',
+    'OUTCOME_APP_PROMOTION'
+];
+
 // --- NEW COMPONENT: AD DETAILS PAGE ---
 const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
     const { workspaceId, level, objectId } = useParams();
@@ -700,7 +709,22 @@ const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
     const [creativeData, setCreativeData] = useState<any>(null);
     const [insights, setInsights] = useState<any>(null);
     const [loading, setLoading] = useState(true);
-    const [objectiveFilter, setObjectiveFilter] = useState('');
+    
+    // Multi-select objective filter state
+    const [selectedObjectives, setSelectedObjectives] = useState<string[]>([]);
+    const [isFilterOpen, setIsFilterOpen] = useState(false);
+    const filterRef = useRef<HTMLDivElement>(null);
+
+    // Handle click outside to close filter
+    useEffect(() => {
+        function handleClickOutside(event: MouseEvent) {
+            if (filterRef.current && !filterRef.current.contains(event.target as Node)) {
+                setIsFilterOpen(false);
+            }
+        }
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
 
     useEffect(() => {
         const fetchDetails = async () => {
@@ -710,7 +734,6 @@ const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
             setLoading(true);
 
             // Fetch Basic Object Data & Campaign Objective
-            // If level is 'ad', we fetch ad details + campaign objective + creative
             if (level === 'ad') {
                 window.FB.api(
                     `/${objectId}`,
@@ -722,7 +745,10 @@ const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                     (response: any) => {
                         if (response && !response.error) {
                             setAdData(response);
-                            setObjectiveFilter(response.campaign?.objective || '');
+                            // Set default filter to the campaign's objective if available
+                            if (response.campaign?.objective) {
+                                setSelectedObjectives([response.campaign.objective]);
+                            }
                             
                             // Handle Creative Data normalization
                             const creative = response.creative;
@@ -730,7 +756,6 @@ const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                                 let videoUrl = creative.video_url;
                                 let imageUrl = creative.image_url || creative.thumbnail_url;
                                 
-                                // Deep dive for video data if not at top level
                                 if (!videoUrl && creative.object_story_spec?.video_data?.file_url) {
                                     videoUrl = creative.object_story_spec.video_data.file_url;
                                 }
@@ -748,7 +773,6 @@ const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                     }
                 );
             } else {
-                // Placeholder for other levels if needed in future
                 setAdData({ name: 'Detalhes indisponíveis para este nível' });
             }
 
@@ -776,11 +800,25 @@ const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
     const formatCurrency = (val: string) => parseFloat(val || '0').toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     const formatNumber = (val: string) => parseInt(val || '0').toLocaleString('pt-BR');
 
+    const toggleObjective = (obj: string) => {
+        setSelectedObjectives(prev => 
+            prev.includes(obj) ? prev.filter(o => o !== obj) : [...prev, obj]
+        );
+    };
+
+    const toggleAllObjectives = () => {
+        if (selectedObjectives.length === ALL_OBJECTIVES.length) {
+            setSelectedObjectives([]);
+        } else {
+            setSelectedObjectives(ALL_OBJECTIVES);
+        }
+    };
+
     return (
         <AppShell workspaces={workspaces}>
-            <div className="max-w-7xl mx-auto py-8 px-6">
+            <div className="max-w-7xl mx-auto py-8 px-6 print-full-width">
                 {/* Header & Filter */}
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 no-print">
                     <div>
                         <div className="flex items-center gap-2 text-text-secondary text-sm mb-1">
                             <Link to={`/w/${workspaceId}/dashboard`} className="hover:text-white">Dashboard</Link>
@@ -791,22 +829,49 @@ const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                         {adData?.campaign && <span className="text-sm text-text-secondary">Campanha: {adData.campaign.name}</span>}
                     </div>
 
-                    <div className="bg-card-dark p-1 rounded-lg border border-border-dark flex items-center gap-2 px-3">
-                        <span className="text-xs font-bold text-text-secondary uppercase">Objetivo da Campanha</span>
-                        <div className="h-6 w-px bg-border-dark mx-1"></div>
-                        <select 
-                            value={objectiveFilter} 
-                            onChange={(e) => setObjectiveFilter(e.target.value)}
-                            className="bg-transparent text-white text-sm font-bold focus:outline-none cursor-pointer"
+                    <div className="relative" ref={filterRef}>
+                        <div 
+                            onClick={() => setIsFilterOpen(!isFilterOpen)}
+                            className="bg-card-dark p-2 rounded-lg border border-border-dark flex items-center gap-3 px-4 cursor-pointer hover:border-primary/50 transition-colors"
                         >
-                            <option value={objectiveFilter}>{objectiveFilter || 'Carregando...'}</option>
-                            <option value="OUTCOME_SALES">OUTCOME_SALES</option>
-                            <option value="OUTCOME_LEADS">OUTCOME_LEADS</option>
-                            <option value="OUTCOME_TRAFFIC">OUTCOME_TRAFFIC</option>
-                            <option value="OUTCOME_AWARENESS">OUTCOME_AWARENESS</option>
-                            <option value="OUTCOME_ENGAGEMENT">OUTCOME_ENGAGEMENT</option>
-                            <option value="OUTCOME_APP_PROMOTION">OUTCOME_APP_PROMOTION</option>
-                        </select>
+                            <span className="text-xs font-bold text-text-secondary uppercase">Objetivos</span>
+                            <div className="h-6 w-px bg-border-dark"></div>
+                            <span className="text-sm font-bold text-white flex items-center gap-1">
+                                {selectedObjectives.length === ALL_OBJECTIVES.length ? 'Todos Selecionados' : 
+                                 selectedObjectives.length === 0 ? 'Nenhum' : 
+                                 `${selectedObjectives.length} Selecionado(s)`}
+                                <span className="material-symbols-outlined text-sm">arrow_drop_down</span>
+                            </span>
+                        </div>
+
+                        {/* Dropdown Menu */}
+                        {isFilterOpen && (
+                            <div className="absolute top-full right-0 mt-2 w-64 bg-card-dark border border-border-dark rounded-xl shadow-2xl z-50 overflow-hidden animate-in fade-in zoom-in-95">
+                                <div 
+                                    onClick={toggleAllObjectives}
+                                    className="px-4 py-3 flex items-center gap-3 hover:bg-white/5 cursor-pointer border-b border-border-dark"
+                                >
+                                    <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${selectedObjectives.length === ALL_OBJECTIVES.length ? 'bg-primary border-primary' : 'border-text-secondary'}`}>
+                                        {selectedObjectives.length === ALL_OBJECTIVES.length && <span className="material-symbols-outlined text-[10px] text-white">check</span>}
+                                    </div>
+                                    <span className="text-sm font-medium text-white">Selecionar Todos</span>
+                                </div>
+                                <div className="max-h-64 overflow-y-auto custom-scrollbar">
+                                    {ALL_OBJECTIVES.map(obj => (
+                                        <div 
+                                            key={obj}
+                                            onClick={() => toggleObjective(obj)}
+                                            className="px-4 py-2.5 flex items-center gap-3 hover:bg-white/5 cursor-pointer"
+                                        >
+                                            <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${selectedObjectives.includes(obj) ? 'bg-primary border-primary' : 'border-text-secondary'}`}>
+                                                {selectedObjectives.includes(obj) && <span className="material-symbols-outlined text-[10px] text-white">check</span>}
+                                            </div>
+                                            <span className="text-xs font-medium text-text-secondary truncate">{obj}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -955,11 +1020,19 @@ const DashboardPage = ({ workspaces }: { workspaces: Workspace[] }) => {
 
             // Mapeamento de campos baseado no nível
             let nameField = 'campaign_name';
-            if (level === 'adset') nameField = 'adset_name';
-            if (level === 'ad') nameField = 'ad_name';
+            let idField = 'campaign_id';
+            
+            if (level === 'adset') {
+                nameField = 'adset_name';
+                idField = 'adset_id';
+            }
+            if (level === 'ad') {
+                nameField = 'ad_name';
+                idField = 'ad_id';
+            }
 
-            // IMPORTANT: Added 'id' to fields to allow linking
-            const fields = `id,${nameField},spend,impressions,clicks,ctr,cpm,cpc,purchase_roas,actions`;
+            // Fix: Request specific ID field instead of generic 'id' which causes Error #100 on Insights API
+            const fields = `${idField},${nameField},spend,impressions,clicks,ctr,cpm,cpc,purchase_roas,actions`;
 
             const params: any = {
                 level: level,
@@ -1019,7 +1092,7 @@ const DashboardPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                             totalSales += sales;
 
                             return {
-                                id: row.id || row.campaign_id || row.adset_id || row.ad_id, // ID fallback
+                                id: row[idField] || row.campaign_id || row.adset_id || row.ad_id, // ID retrieval updated
                                 name: row[nameField] || 'Sem Nome',
                                 status: 'active', 
                                 spend,
@@ -1076,9 +1149,9 @@ const DashboardPage = ({ workspaces }: { workspaces: Workspace[] }) => {
 
 
   return (
-    <div className="bg-background-light dark:bg-background-dark text-slate-900 dark:text-white overflow-x-hidden min-h-screen flex flex-col font-display">
+    <div className="bg-background-light dark:bg-background-dark text-slate-900 dark:text-white overflow-x-hidden min-h-screen flex flex-col font-display print-full-width">
         {/* Top Navigation Bar */}
-        <header className="sticky top-0 z-50 flex items-center justify-between whitespace-nowrap border-b border-solid border-border-dark bg-background-dark/95 backdrop-blur-md px-4 sm:px-10 py-3">
+        <header className="sticky top-0 z-50 flex items-center justify-between whitespace-nowrap border-b border-solid border-border-dark bg-background-dark/95 backdrop-blur-md px-4 sm:px-10 py-3 no-print">
             <div className="flex items-center gap-4 text-white">
                 <div className="size-8 flex items-center justify-center rounded bg-primary/20 text-primary">
                     <span className="material-symbols-outlined">analytics</span>
@@ -1108,12 +1181,12 @@ const DashboardPage = ({ workspaces }: { workspaces: Workspace[] }) => {
         </header>
 
         {/* Main Content */}
-        <div className="flex-1 flex justify-center py-6 px-4 sm:px-8">
-            <div className="w-full max-w-[1280px] flex flex-col gap-6">
+        <div className="flex-1 flex justify-center py-6 px-4 sm:px-8 print-full-width">
+            <div className="w-full max-w-[1280px] flex flex-col gap-6 print-full-width">
                 
                 {/* HTTPS Warning */}
                 {httpsWarning && (
-                     <div className="bg-amber-500/10 border border-amber-500/20 text-amber-500 p-4 rounded-xl flex items-center gap-3">
+                     <div className="bg-amber-500/10 border border-amber-500/20 text-amber-500 p-4 rounded-xl flex items-center gap-3 no-print">
                         <span className="material-symbols-outlined">warning</span>
                         <span className="text-sm font-bold">Atenção: A API do Facebook pode bloquear requisições HTTP. Utilize HTTPS para garantir o funcionamento.</span>
                      </div>
@@ -1123,11 +1196,11 @@ const DashboardPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                 <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-6 p-2">
                     <div className="flex flex-col gap-2">
                         <h1 className="text-white text-3xl sm:text-4xl font-black leading-tight tracking-[-0.033em]">Dashboard</h1>
-                        <p className="text-text-secondary text-base font-normal">Visão geral de performance e métricas principais.</p>
+                        <p className="text-text-secondary text-base font-normal no-print">Visão geral de performance e métricas principais.</p>
                     </div>
                     
                     {/* FILTERS SECTION */}
-                    <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-3 no-print">
                         <div className="flex bg-card-dark rounded-lg p-1 border border-border-dark">
                             <button 
                                 onClick={() => handlePresetClick('last_7d')}
@@ -1197,9 +1270,15 @@ const DashboardPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                                 <span className={`text-xs sm:text-sm font-medium transition-colors ${level === 'ad' ? 'text-white font-bold' : 'text-text-secondary'}`}>Anúncio</span>
                             </label>
                         </div>
-                        <button onClick={() => window.location.reload()} className="flex items-center justify-center size-10 rounded-lg bg-primary hover:bg-primary-dark text-white shadow-lg shadow-primary/20 transition-all">
-                            <span className="material-symbols-outlined text-[20px]">refresh</span>
-                        </button>
+                        <div className="flex gap-2">
+                             <Button variant="secondary" onClick={() => window.print()} className="h-10 px-3 text-xs">
+                                <span className="material-symbols-outlined text-[18px]">print</span>
+                                Exportar (PDF)
+                             </Button>
+                             <button onClick={() => window.location.reload()} className="flex items-center justify-center size-10 rounded-lg bg-primary hover:bg-primary-dark text-white shadow-lg shadow-primary/20 transition-all">
+                                <span className="material-symbols-outlined text-[20px]">refresh</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -1257,6 +1336,27 @@ const DashboardPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                             <thead className="bg-background-dark/50 text-xs uppercase text-text-secondary font-semibold">
                                 <tr>
                                     <th className="px-6 py-4">Nome</th>
+                                    {/* Link Columns for Ads Level */}
+                                    {level === 'ad' && (
+                                        <>
+                                            <th className="px-2 py-4 text-center w-12">
+                                                <span className="sr-only">Facebook</span>
+                                                <div className="flex justify-center">
+                                                    <svg className="w-4 h-4 text-blue-500 fill-current" viewBox="0 0 24 24">
+                                                        <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                                                    </svg>
+                                                </div>
+                                            </th>
+                                            <th className="px-2 py-4 text-center w-12">
+                                                <span className="sr-only">Instagram</span>
+                                                <div className="flex justify-center">
+                                                    <svg className="w-4 h-4 text-pink-500 fill-current" viewBox="0 0 24 24">
+                                                        <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+                                                    </svg>
+                                                </div>
+                                            </th>
+                                        </>
+                                    )}
                                     <th className="px-6 py-4 text-right">Gasto</th>
                                     <th className="px-6 py-4 text-right">Vendas</th>
                                     <th className="px-6 py-4 text-right">Impr.</th>
@@ -1265,9 +1365,9 @@ const DashboardPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                             </thead>
                             <tbody className="divide-y divide-border-dark">
                                 {loading ? (
-                                    <tr><td colSpan={5} className="px-6 py-8 text-center"><Skeleton className="h-6 w-full mb-2"/><Skeleton className="h-6 w-3/4 mx-auto"/></td></tr>
+                                    <tr><td colSpan={level === 'ad' ? 7 : 5} className="px-6 py-8 text-center"><Skeleton className="h-6 w-full mb-2"/><Skeleton className="h-6 w-3/4 mx-auto"/></td></tr>
                                 ) : tableData.length === 0 ? (
-                                    <tr><td colSpan={5} className="px-6 py-8 text-center text-text-secondary">Nenhum dado encontrado para o período.</td></tr>
+                                    <tr><td colSpan={level === 'ad' ? 7 : 5} className="px-6 py-8 text-center text-text-secondary">Nenhum dado encontrado para o período.</td></tr>
                                 ) : (
                                     tableData.map((c, i) => (
                                         <tr key={i} className="hover:bg-border-dark/20 transition-colors cursor-pointer group">
@@ -1283,6 +1383,35 @@ const DashboardPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                                                     <span className="material-symbols-outlined text-xs opacity-50">open_in_new</span>
                                                 </Link>
                                             </td>
+                                            
+                                            {/* Link Buttons for Ads Level */}
+                                            {level === 'ad' && (
+                                                <>
+                                                    <td className="px-2 py-4 text-center">
+                                                        <a 
+                                                            href={`https://www.facebook.com/${c.id}`} 
+                                                            target="_blank" 
+                                                            rel="noopener noreferrer"
+                                                            className="flex items-center justify-center size-8 rounded-full bg-blue-500/10 hover:bg-blue-500 hover:text-white text-blue-500 transition-all mx-auto"
+                                                            title="Ver no Facebook (via Ad ID)"
+                                                        >
+                                                            <span className="material-symbols-outlined text-[16px]">open_in_new</span>
+                                                        </a>
+                                                    </td>
+                                                    <td className="px-2 py-4 text-center">
+                                                        <a 
+                                                            href={`https://www.facebook.com/ads/library/?id=${c.id}`} 
+                                                            target="_blank" 
+                                                            rel="noopener noreferrer"
+                                                            className="flex items-center justify-center size-8 rounded-full bg-pink-500/10 hover:bg-pink-500 hover:text-white text-pink-500 transition-all mx-auto"
+                                                            title="Ver na Biblioteca de Anúncios (Instagram)"
+                                                        >
+                                                            <span className="material-symbols-outlined text-[16px]">open_in_new</span>
+                                                        </a>
+                                                    </td>
+                                                </>
+                                            )}
+
                                             <td className="px-6 py-4 text-right text-white tabular-nums">R$ {c.spend.toLocaleString('pt-BR', { minimumFractionDigits: 2})}</td>
                                             <td className="px-6 py-4 text-right text-white tabular-nums">{c.sales}</td>
                                             <td className="px-6 py-4 text-right text-white tabular-nums">{c.impressions.toLocaleString()}</td>
