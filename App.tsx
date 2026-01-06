@@ -710,6 +710,13 @@ const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
     const [insights, setInsights] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     
+    // Filters State
+    const [dateMode, setDateMode] = useState<'preset' | 'custom'>('preset');
+    const [timeRange, setTimeRange] = useState<'last_7d' | 'last_30d' | 'this_month' | 'last_month'>('last_30d');
+    const [customDates, setCustomDates] = useState({ start: '', end: '' });
+    const [isCustomDateModalOpen, setIsCustomDateModalOpen] = useState(false);
+    const [tempCustomDates, setTempCustomDates] = useState({ start: '', end: '' });
+
     // Multi-select objective filter state
     const [selectedObjectives, setSelectedObjectives] = useState<string[]>([]);
     const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -728,6 +735,9 @@ const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
 
     useEffect(() => {
         const fetchDetails = async () => {
+             // Prevent fetching if custom mode is active but dates are missing
+             if (dateMode === 'custom' && (!customDates.start || !customDates.end)) return;
+             
             const token = await SecureKV.getWorkspaceToken(workspaceId!);
             if (!token || !window.FB) return;
 
@@ -777,17 +787,27 @@ const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
             }
 
             // Fetch Insights
+            const insightsParams: any = {
+                fields: 'spend,impressions,clicks,ctr,cpm,cpc,actions,purchase_roas',
+                access_token: token
+            };
+
+            if (dateMode === 'custom') {
+                insightsParams.time_range = JSON.stringify({ since: customDates.start, until: customDates.end });
+            } else {
+                insightsParams.date_preset = timeRange;
+            }
+
             window.FB.api(
                 `/${objectId}/insights`,
                 'GET',
-                {
-                    fields: 'spend,impressions,clicks,ctr,cpm,cpc,actions,purchase_roas',
-                    date_preset: 'maximum',
-                    access_token: token
-                },
+                insightsParams,
                 (response: any) => {
                     if (response && !response.error && response.data.length > 0) {
                         setInsights(response.data[0]);
+                    } else {
+                        // Clear insights if no data returned for the selected period
+                        setInsights(null);
                     }
                     setLoading(false);
                 }
@@ -795,7 +815,7 @@ const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
         };
 
         fetchDetails();
-    }, [workspaceId, objectId, level]);
+    }, [workspaceId, objectId, level, dateMode, timeRange, customDates]);
 
     const formatCurrency = (val: string) => parseFloat(val || '0').toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     const formatNumber = (val: string) => parseInt(val || '0').toLocaleString('pt-BR');
@@ -814,6 +834,19 @@ const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
         }
     };
 
+    const handleApplyCustomDates = () => {
+        if (tempCustomDates.start && tempCustomDates.end) {
+            setCustomDates(tempCustomDates);
+            setDateMode('custom');
+            setIsCustomDateModalOpen(false);
+        }
+    };
+
+    const handlePresetClick = (preset: 'last_7d' | 'last_30d' | 'this_month' | 'last_month') => {
+        setDateMode('preset');
+        setTimeRange(preset);
+    };
+
     return (
         <AppShell workspaces={workspaces}>
             <div className="max-w-7xl mx-auto py-8 px-6 print-full-width">
@@ -829,49 +862,80 @@ const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                         {adData?.campaign && <span className="text-sm text-text-secondary">Campanha: {adData.campaign.name}</span>}
                     </div>
 
-                    <div className="relative" ref={filterRef}>
-                        <div 
-                            onClick={() => setIsFilterOpen(!isFilterOpen)}
-                            className="bg-card-dark p-2 rounded-lg border border-border-dark flex items-center gap-3 px-4 cursor-pointer hover:border-primary/50 transition-colors"
-                        >
-                            <span className="text-xs font-bold text-text-secondary uppercase">Objetivos</span>
-                            <div className="h-6 w-px bg-border-dark"></div>
-                            <span className="text-sm font-bold text-white flex items-center gap-1">
-                                {selectedObjectives.length === ALL_OBJECTIVES.length ? 'Todos Selecionados' : 
-                                 selectedObjectives.length === 0 ? 'Nenhum' : 
-                                 `${selectedObjectives.length} Selecionado(s)`}
-                                <span className="material-symbols-outlined text-sm">arrow_drop_down</span>
-                            </span>
+                    <div className="flex flex-col sm:flex-row gap-3">
+                         {/* Date Filters */}
+                        <div className="flex bg-card-dark rounded-lg p-1 border border-border-dark">
+                            <button 
+                                onClick={() => handlePresetClick('last_7d')}
+                                className={`px-3 py-1.5 rounded text-xs sm:text-sm font-medium transition-colors ${dateMode === 'preset' && timeRange === 'last_7d' ? 'bg-primary text-white shadow-sm' : 'text-text-secondary hover:text-white'}`}
+                            >
+                                7d
+                            </button>
+                            <button 
+                                onClick={() => handlePresetClick('last_30d')}
+                                className={`px-3 py-1.5 rounded text-xs sm:text-sm font-medium transition-colors ${dateMode === 'preset' && timeRange === 'last_30d' ? 'bg-primary text-white shadow-sm' : 'text-text-secondary hover:text-white'}`}
+                            >
+                                30d
+                            </button>
+                            <button 
+                                onClick={() => handlePresetClick('this_month')}
+                                className={`px-3 py-1.5 rounded text-xs sm:text-sm font-medium transition-colors ${dateMode === 'preset' && timeRange === 'this_month' ? 'bg-primary text-white shadow-sm' : 'text-text-secondary hover:text-white'}`}
+                            >
+                                Mês Atual
+                            </button>
+                            <button 
+                                onClick={() => setIsCustomDateModalOpen(true)}
+                                className={`px-3 py-1.5 rounded text-xs sm:text-sm font-medium transition-colors ${dateMode === 'custom' ? 'bg-primary text-white shadow-sm' : 'text-text-secondary hover:text-white'}`}
+                            >
+                                {dateMode === 'custom' ? 'Custom' : 'Custom'}
+                            </button>
                         </div>
 
-                        {/* Dropdown Menu */}
-                        {isFilterOpen && (
-                            <div className="absolute top-full right-0 mt-2 w-64 bg-card-dark border border-border-dark rounded-xl shadow-2xl z-50 overflow-hidden animate-in fade-in zoom-in-95">
-                                <div 
-                                    onClick={toggleAllObjectives}
-                                    className="px-4 py-3 flex items-center gap-3 hover:bg-white/5 cursor-pointer border-b border-border-dark"
-                                >
-                                    <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${selectedObjectives.length === ALL_OBJECTIVES.length ? 'bg-primary border-primary' : 'border-text-secondary'}`}>
-                                        {selectedObjectives.length === ALL_OBJECTIVES.length && <span className="material-symbols-outlined text-[10px] text-white">check</span>}
-                                    </div>
-                                    <span className="text-sm font-medium text-white">Selecionar Todos</span>
-                                </div>
-                                <div className="max-h-64 overflow-y-auto custom-scrollbar">
-                                    {ALL_OBJECTIVES.map(obj => (
-                                        <div 
-                                            key={obj}
-                                            onClick={() => toggleObjective(obj)}
-                                            className="px-4 py-2.5 flex items-center gap-3 hover:bg-white/5 cursor-pointer"
-                                        >
-                                            <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${selectedObjectives.includes(obj) ? 'bg-primary border-primary' : 'border-text-secondary'}`}>
-                                                {selectedObjectives.includes(obj) && <span className="material-symbols-outlined text-[10px] text-white">check</span>}
-                                            </div>
-                                            <span className="text-xs font-medium text-text-secondary truncate">{obj}</span>
-                                        </div>
-                                    ))}
-                                </div>
+                        {/* Objective Filter */}
+                        <div className="relative" ref={filterRef}>
+                            <div 
+                                onClick={() => setIsFilterOpen(!isFilterOpen)}
+                                className="bg-card-dark p-2 rounded-lg border border-border-dark flex items-center gap-3 px-4 cursor-pointer hover:border-primary/50 transition-colors h-full"
+                            >
+                                <span className="text-xs font-bold text-text-secondary uppercase">Objetivos</span>
+                                <div className="h-4 w-px bg-border-dark"></div>
+                                <span className="text-sm font-bold text-white flex items-center gap-1">
+                                    {selectedObjectives.length === ALL_OBJECTIVES.length ? 'Todos' : 
+                                    selectedObjectives.length === 0 ? 'Nenhum' : 
+                                    `${selectedObjectives.length}`}
+                                    <span className="material-symbols-outlined text-sm">arrow_drop_down</span>
+                                </span>
                             </div>
-                        )}
+
+                            {/* Dropdown Menu */}
+                            {isFilterOpen && (
+                                <div className="absolute top-full right-0 mt-2 w-64 bg-card-dark border border-border-dark rounded-xl shadow-2xl z-50 overflow-hidden animate-in fade-in zoom-in-95">
+                                    <div 
+                                        onClick={toggleAllObjectives}
+                                        className="px-4 py-3 flex items-center gap-3 hover:bg-white/5 cursor-pointer border-b border-border-dark"
+                                    >
+                                        <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${selectedObjectives.length === ALL_OBJECTIVES.length ? 'bg-primary border-primary' : 'border-text-secondary'}`}>
+                                            {selectedObjectives.length === ALL_OBJECTIVES.length && <span className="material-symbols-outlined text-[10px] text-white">check</span>}
+                                        </div>
+                                        <span className="text-sm font-medium text-white">Selecionar Todos</span>
+                                    </div>
+                                    <div className="max-h-64 overflow-y-auto custom-scrollbar">
+                                        {ALL_OBJECTIVES.map(obj => (
+                                            <div 
+                                                key={obj}
+                                                onClick={() => toggleObjective(obj)}
+                                                className="px-4 py-2.5 flex items-center gap-3 hover:bg-white/5 cursor-pointer"
+                                            >
+                                                <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${selectedObjectives.includes(obj) ? 'bg-primary border-primary' : 'border-text-secondary'}`}>
+                                                    {selectedObjectives.includes(obj) && <span className="material-symbols-outlined text-[10px] text-white">check</span>}
+                                                </div>
+                                                <span className="text-xs font-medium text-text-secondary truncate">{obj}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
 
@@ -941,6 +1005,43 @@ const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                          </Card>
                     </div>
                 </div>
+
+                {/* Custom Date Modal */}
+                <Modal 
+                    isOpen={isCustomDateModalOpen} 
+                    onClose={() => setIsCustomDateModalOpen(false)}
+                    title="Selecionar Período Customizado"
+                    footer={
+                        <>
+                            <Button variant="ghost" onClick={() => setIsCustomDateModalOpen(false)}>Cancelar</Button>
+                            <Button onClick={handleApplyCustomDates} disabled={!tempCustomDates.start || !tempCustomDates.end}>Aplicar Filtro</Button>
+                        </>
+                    }
+                >
+                    <div className="space-y-4">
+                        <p className="text-text-secondary text-sm">Selecione o intervalo de datas para análise:</p>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="flex flex-col gap-2">
+                                <label className="text-xs font-bold text-white uppercase tracking-wider">Data Início</label>
+                                <input 
+                                    type="date" 
+                                    className="bg-background-dark border border-border-dark rounded-lg p-3 text-white focus:ring-1 focus:ring-primary focus:border-primary outline-none text-sm"
+                                    value={tempCustomDates.start}
+                                    onChange={(e) => setTempCustomDates(prev => ({...prev, start: e.target.value}))}
+                                />
+                            </div>
+                            <div className="flex flex-col gap-2">
+                                <label className="text-xs font-bold text-white uppercase tracking-wider">Data Fim</label>
+                                <input 
+                                    type="date" 
+                                    className="bg-background-dark border border-border-dark rounded-lg p-3 text-white focus:ring-1 focus:ring-primary focus:border-primary outline-none text-sm"
+                                    value={tempCustomDates.end}
+                                    onChange={(e) => setTempCustomDates(prev => ({...prev, end: e.target.value}))}
+                                />
+                            </div>
+                        </div>
+                    </div>
+                </Modal>
             </div>
         </AppShell>
     );
@@ -979,19 +1080,26 @@ const DashboardPage = ({ workspaces }: { workspaces: Workspace[] }) => {
             setHttpsWarning(true);
         }
 
-        // Resolve Connection Info
-        let accId = workspace?.adAccountId;
-        if (!accId && workspaceId) {
-            const ctx = SecureKV.getWorkspaceContext(workspaceId);
-            if (ctx?.adAccountId) accId = ctx.adAccountId;
+        // 1. Retrieve Ad Account ID from Workspace Config (Memory)
+        if (workspace?.adAccountId) {
+            setAdAccountId(workspace.adAccountId);
+            setIsConnected(true);
+            return;
         }
 
-        if (workspace?.metaConnected && accId) {
-            setAdAccountId(accId);
-            setIsConnected(true);
-        } else {
-            setIsConnected(false);
+        // 2. Retrieve from Local Storage Context (Persistence)
+        if (workspaceId) {
+            const ctx = SecureKV.getWorkspaceContext(workspaceId);
+            if (ctx?.adAccountId) {
+                setAdAccountId(ctx.adAccountId);
+                setIsConnected(true);
+                return;
+            }
         }
+
+        // 3. Fallback: Missing ID -> Prompt User
+        setIsConnected(false);
+        setAdAccountId('');
     }, [workspace, workspaceId]);
 
     // Data Fetching
@@ -1018,38 +1126,53 @@ const DashboardPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                  return;
             }
 
-            // Mapeamento de campos baseado no nível
-            let nameField = 'campaign_name';
-            let idField = 'campaign_id';
-            
-            if (level === 'adset') {
-                nameField = 'adset_name';
-                idField = 'adset_id';
-            }
-            if (level === 'ad') {
-                nameField = 'ad_name';
-                idField = 'ad_id';
-            }
-
-            // Fix: Request specific ID field instead of generic 'id' which causes Error #100 on Insights API
-            const fields = `${idField},${nameField},spend,impressions,clicks,ctr,cpm,cpc,purchase_roas,actions`;
-
-            const params: any = {
-                level: level,
-                fields: fields,
+            let endpoint = `/${adAccountId}/insights`;
+            let fields = '';
+            let params: any = {
                 access_token: token,
                 limit: 50
             };
 
-            // Apply Date Logic
-            if (dateMode === 'custom') {
-                params.time_range = JSON.stringify({ since: customDates.start, until: customDates.end });
+            // Strategy: For Ads level, we query '/ads' endpoint to get creative links
+            // For Campaign/Adset, we query '/insights' standard endpoint
+            if (level === 'ad') {
+                endpoint = `/${adAccountId}/ads`;
+                // Construct insights field expansion with date filtering
+                let insightsParams = '';
+                if (dateMode === 'custom') {
+                    insightsParams = `.time_range(${JSON.stringify({ since: customDates.start, until: customDates.end })})`;
+                } else {
+                    insightsParams = `.date_preset(${timeRange})`;
+                }
+                
+                // Request Ad fields + expanded insights
+                // Note: creative{instagram_permalink_url} might be null if not available
+                fields = `id,name,preview_shareable_link,creative{instagram_permalink_url},insights${insightsParams}{spend,impressions,clicks,ctr,cpm,cpc,purchase_roas,actions}`;
+                params.fields = fields;
             } else {
-                params.date_preset = timeRange;
+                // Standard Insights Query for Campaign/Adset
+                let nameField = 'campaign_name';
+                let idField = 'campaign_id';
+                
+                if (level === 'adset') {
+                    nameField = 'adset_name';
+                    idField = 'adset_id';
+                }
+
+                fields = `${idField},${nameField},spend,impressions,clicks,ctr,cpm,cpc,purchase_roas,actions`;
+                params.level = level;
+                params.fields = fields;
+
+                // Apply Date Logic for Standard Insights
+                if (dateMode === 'custom') {
+                    params.time_range = JSON.stringify({ since: customDates.start, until: customDates.end });
+                } else {
+                    params.date_preset = timeRange;
+                }
             }
 
             window.FB.api(
-                `/${adAccountId}/insights`,
+                endpoint,
                 'GET',
                 params,
                 (response: any) => {
@@ -1063,26 +1186,33 @@ const DashboardPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                         let totalClicks = 0;
                         let totalSales = 0;
                         
-                        // Process Table Rows
                         const rows = rawData.map((row: any) => {
-                            const spend = parseFloat(row.spend || '0');
-                            const impr = parseInt(row.impressions || '0');
-                            const clicks = parseInt(row.clicks || '0');
-                            const ctr = parseFloat(row.ctr || '0');
-                            const cpm = parseFloat(row.cpm || '0');
-                            const cpc = parseFloat(row.cpc || '0');
+                            // Extract metrics based on endpoint structure
+                            // If level is 'ad', metrics are nested in row.insights.data[0]
+                            let metrics = row;
+                            if (level === 'ad') {
+                                metrics = (row.insights && row.insights.data && row.insights.data.length > 0) ? row.insights.data[0] : null;
+                            }
+
+                            // If ad has no insights for the period, metrics might be null
+                            const spend = parseFloat(metrics?.spend || '0');
+                            const impr = parseInt(metrics?.impressions || '0');
+                            const clicks = parseInt(metrics?.clicks || '0');
+                            const ctr = parseFloat(metrics?.ctr || '0');
+                            const cpm = parseFloat(metrics?.cpm || '0');
+                            const cpc = parseFloat(metrics?.cpc || '0');
                             
-                            // Find sales (purchases)
+                            // Find sales
                             let sales = 0;
-                            if (row.actions) {
-                                const purchaseAction = row.actions.find((a: any) => a.action_type === 'purchase' || a.action_type === 'offsite_conversion.fb_pixel_purchase');
+                            if (metrics?.actions) {
+                                const purchaseAction = metrics.actions.find((a: any) => a.action_type === 'purchase' || a.action_type === 'offsite_conversion.fb_pixel_purchase');
                                 if (purchaseAction) sales = parseInt(purchaseAction.value);
                             }
 
-                            // Calculate ROAS (simplified if field missing)
+                            // Calculate ROAS
                             let roas = 0;
-                            if (row.purchase_roas) {
-                                const roasObj = row.purchase_roas.find((r: any) => r.action_type === 'purchase_roas' || r.action_type === 'omni_purchase');
+                            if (metrics?.purchase_roas) {
+                                const roasObj = metrics.purchase_roas.find((r: any) => r.action_type === 'purchase_roas' || r.action_type === 'omni_purchase');
                                 if (roasObj) roas = parseFloat(roasObj.value);
                             }
 
@@ -1091,9 +1221,18 @@ const DashboardPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                             totalClicks += clicks;
                             totalSales += sales;
 
+                            // Identify ID and Name
+                            let id = row.id;
+                            let name = row.name;
+
+                            if (level !== 'ad') {
+                                if (level === 'campaign') { id = row.campaign_id; name = row.campaign_name; }
+                                if (level === 'adset') { id = row.adset_id; name = row.adset_name; }
+                            }
+
                             return {
-                                id: row[idField] || row.campaign_id || row.adset_id || row.ad_id, // ID retrieval updated
-                                name: row[nameField] || 'Sem Nome',
+                                id: id || 'unknown',
+                                name: name || 'Sem Nome',
                                 status: 'active', 
                                 spend,
                                 sales,
@@ -1102,11 +1241,31 @@ const DashboardPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                                 cpm, 
                                 cpc,
                                 impressions: impr,
-                                clicks
+                                clicks,
+                                // Ad specific fields
+                                previewLink: row.preview_shareable_link,
+                                instagramLink: row.creative?.instagram_permalink_url
                             };
                         });
 
-                        // Calculate Aggregate KPIs
+                        // Filter out ads with no data if desired, or keep them with 0s. 
+                        // For now, keeping them matches standard dashboard behavior often.
+                        // But usually dashboards hide inactive ads if no metrics. 
+                        // Let's filter only if spend is 0 to avoid clutter if querying /ads directly returns all ads ever created.
+                        const activeRows = level === 'ad' ? rows.filter((r: any) => r.impressions > 0 || r.spend > 0) : rows;
+
+                        // Calculate Aggregate KPIs from filtered rows? 
+                        // Better to calculate from ALL returned rows that have data to match summary.
+                        // But wait, the KPI summary usually sums up everything returned.
+                        
+                        // Recalculate totals based on activeRows if we filter
+                        if (level === 'ad') {
+                             totalSpend = activeRows.reduce((acc: number, r: any) => acc + r.spend, 0);
+                             totalImpr = activeRows.reduce((acc: number, r: any) => acc + r.impressions, 0);
+                             totalClicks = activeRows.reduce((acc: number, r: any) => acc + r.clicks, 0);
+                             totalSales = activeRows.reduce((acc: number, r: any) => acc + r.sales, 0);
+                        }
+
                         const aggCtr = totalImpr > 0 ? (totalClicks / totalImpr) * 100 : 0;
                         const aggCpc = totalClicks > 0 ? totalSpend / totalClicks : 0;
                         const aggCpm = totalImpr > 0 ? (totalSpend / totalImpr) * 1000 : 0;
@@ -1122,7 +1281,7 @@ const DashboardPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                             roas: 0 
                         });
 
-                        setTableData(rows);
+                        setTableData(activeRows);
                     } else {
                         console.error(response.error);
                         setError(response.error?.message || "Erro ao buscar dados do Facebook API.");
@@ -1351,7 +1510,7 @@ const DashboardPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                                                 <span className="sr-only">Instagram</span>
                                                 <div className="flex justify-center">
                                                     <svg className="w-4 h-4 text-pink-500 fill-current" viewBox="0 0 24 24">
-                                                        <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+                                                        <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
                                                     </svg>
                                                 </div>
                                             </th>
@@ -1388,26 +1547,38 @@ const DashboardPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                                             {level === 'ad' && (
                                                 <>
                                                     <td className="px-2 py-4 text-center">
-                                                        <a 
-                                                            href={`https://www.facebook.com/${c.id}`} 
-                                                            target="_blank" 
-                                                            rel="noopener noreferrer"
-                                                            className="flex items-center justify-center size-8 rounded-full bg-blue-500/10 hover:bg-blue-500 hover:text-white text-blue-500 transition-all mx-auto"
-                                                            title="Ver no Facebook (via Ad ID)"
-                                                        >
-                                                            <span className="material-symbols-outlined text-[16px]">open_in_new</span>
-                                                        </a>
+                                                        {c.previewLink ? (
+                                                            <a 
+                                                                href={c.previewLink}
+                                                                target="_blank" 
+                                                                rel="noopener noreferrer"
+                                                                className="flex items-center justify-center size-8 rounded-full bg-blue-500/10 hover:bg-blue-500 hover:text-white text-blue-500 transition-all mx-auto"
+                                                                title="Ver prévia no Facebook"
+                                                            >
+                                                                <span className="material-symbols-outlined text-[16px]">open_in_new</span>
+                                                            </a>
+                                                        ) : (
+                                                            <span className="flex items-center justify-center size-8 rounded-full bg-white/5 text-text-secondary opacity-30 mx-auto cursor-not-allowed" title="Link indisponível">
+                                                                <span className="material-symbols-outlined text-[16px]">block</span>
+                                                            </span>
+                                                        )}
                                                     </td>
                                                     <td className="px-2 py-4 text-center">
-                                                        <a 
-                                                            href={`https://www.facebook.com/ads/library/?id=${c.id}`} 
-                                                            target="_blank" 
-                                                            rel="noopener noreferrer"
-                                                            className="flex items-center justify-center size-8 rounded-full bg-pink-500/10 hover:bg-pink-500 hover:text-white text-pink-500 transition-all mx-auto"
-                                                            title="Ver na Biblioteca de Anúncios (Instagram)"
-                                                        >
-                                                            <span className="material-symbols-outlined text-[16px]">open_in_new</span>
-                                                        </a>
+                                                        {c.instagramLink ? (
+                                                            <a 
+                                                                href={c.instagramLink}
+                                                                target="_blank" 
+                                                                rel="noopener noreferrer"
+                                                                className="flex items-center justify-center size-8 rounded-full bg-pink-500/10 hover:bg-pink-500 hover:text-white text-pink-500 transition-all mx-auto"
+                                                                title="Ver no Instagram"
+                                                            >
+                                                                <span className="material-symbols-outlined text-[16px]">open_in_new</span>
+                                                            </a>
+                                                        ) : (
+                                                            <span className="flex items-center justify-center size-8 rounded-full bg-white/5 text-text-secondary opacity-30 mx-auto cursor-not-allowed" title="Link indisponível">
+                                                                <span className="material-symbols-outlined text-[16px]">block</span>
+                                                            </span>
+                                                        )}
                                                     </td>
                                                 </>
                                             )}
