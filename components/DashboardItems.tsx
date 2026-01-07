@@ -173,8 +173,8 @@ export const DataTable: React.FC<{ data: InsightData[]; isLoading?: boolean; vie
           { key: 'igLink', label: 'IG', icon: 'instagram' }
       ] : []),
       { key: 'spend', label: 'Investimento' },
-      { key: 'messages', label: 'Msgs' }, 
-      { key: 'costPerConversation', label: 'Custo/Msg' },
+      { key: 'messages', label: 'Mensagens' }, 
+      { key: 'costPerConversation', label: 'Custo por Mensagem' },
       { key: 'impressions', label: 'Impr.' },
       { key: 'clicks', label: 'Clicks' },
       { key: 'ctr', label: 'CTR' },

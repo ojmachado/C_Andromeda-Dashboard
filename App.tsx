@@ -264,8 +264,11 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
                   const roasVal = i.purchase_roas?.[0]?.value ? parseFloat(i.purchase_roas[0].value) : 0;
                   const cpa = purchases > 0 ? spend / purchases : 0;
                   
-                  // Conversions
-                  const messages = getActionVal(i.actions, 'onsite_conversion.messaging_conversation_started_7d');
+                  // Conversions: Check both onsite_conversion.messaging_conversation_started_7d AND messaging_conversation_started_7d
+                  const messages = 
+                      getActionVal(i.actions, 'onsite_conversion.messaging_conversation_started_7d') || 
+                      getActionVal(i.actions, 'messaging_conversation_started_7d');
+                      
                   const costPerConversation = messages > 0 ? spend / messages : 0;
 
                   // Resolve Objective and Campaign Name/Link
@@ -357,7 +360,11 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
   };
   
   const totalSales = getActionValue(stats?.actions, 'purchase') || getActionValue(stats?.actions, 'offsite_conversion.fb_pixel_purchase');
-  const totalMessages = getActionValue(stats?.actions, 'onsite_conversion.messaging_conversation_started_7d');
+  
+  // Total Messages: Check both keys
+  const totalMessages = 
+      getActionValue(stats?.actions, 'onsite_conversion.messaging_conversation_started_7d') || 
+      getActionValue(stats?.actions, 'messaging_conversation_started_7d');
   
   const totalSpend = parseFloat(stats?.spend || 0);
   const globalRoas = totalSpend > 0 && stats?.purchase_roas ? parseFloat(stats.purchase_roas[0]?.value || 0) : 0;
@@ -666,80 +673,81 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
 };
 
 const WorkspaceSetupWrapper = ({ workspaces, onUpdate, sdkReady }: { workspaces: Workspace[], onUpdate: (w: Workspace) => void, sdkReady: boolean }) => {
-  const { workspaceId } = useParams();
-  const w = workspaces.find(w => w.id === workspaceId);
-  if (!w) return <Navigate to="/workspaces" replace />;
-  return <SetupWizard workspace={w} onUpdateWorkspace={onUpdate} sdkReady={sdkReady} />;
+    const { workspaceId } = useParams();
+    const workspace = workspaces.find(w => w.id === workspaceId);
+    
+    if (!workspace) return <Navigate to="/workspaces" />;
+    
+    return <SetupWizard workspace={workspace} onUpdateWorkspace={onUpdate} sdkReady={sdkReady} />;
 };
 
 const App = () => {
-  const [workspaces, setWorkspaces] = useState<Workspace[]>(() => {
-      const stored = localStorage.getItem('sys:workspaces');
-      return stored ? JSON.parse(stored) : [{ id: 'wk_demo', name: 'Demo Workspace', metaConnected: false }];
-  });
-  const [sdkReady, setSdkReady] = useState(false);
+    const [sdkReady, setSdkReady] = useState(false);
+    // Initialize with a demo workspace for better UX upon first load
+    const [workspaces, setWorkspaces] = useState<Workspace[]>([
+        { id: 'wk_demo', name: 'Demo Store', metaConnected: false }
+    ]);
 
-  useEffect(() => {
-    localStorage.setItem('sys:workspaces', JSON.stringify(workspaces));
-  }, [workspaces]);
+    useEffect(() => {
+        const initSDK = async () => {
+            const config = await SecureKV.getMetaConfig();
+            
+            // Setup Global Callback
+            window.fbAsyncInit = function() {
+                window.FB.init({
+                    appId: config?.appId || '',
+                    cookie: true,
+                    xfbml: true,
+                    version: 'v18.0'
+                });
+                setSdkReady(true);
+            };
 
-  useEffect(() => {
-    const initSDK = async () => {
-       const config = await SecureKV.getMetaConfig();
-       if (config && config.appId) {
-          window.fbAsyncInit = function() {
-            window.FB.init({
-              appId      : config.appId,
-              cookie     : true,
-              xfbml      : true,
-              version    : 'v19.0'
-            });
-            setSdkReady(true);
-          };
-          (function(d, s, id){
-             var js, fjs = d.getElementsByTagName(s)[0];
-             if (d.getElementById(id)) {return;}
-             js = d.createElement(s) as HTMLScriptElement; js.id = id;
-             js.src = "https://connect.facebook.net/en_US/sdk.js";
-             if (fjs && fjs.parentNode) {
-                 fjs.parentNode.insertBefore(js, fjs);
-             } else {
-                 d.head.appendChild(js);
-             }
-           }(document, 'script', 'facebook-jssdk'));
-       }
+            // Load Script
+            (function(d, s, id){
+                var js, fjs = d.getElementsByTagName(s)[0];
+                if (d.getElementById(id)) { return; }
+                js = d.createElement(s) as HTMLScriptElement; js.id = id;
+                js.src = "https://connect.facebook.net/en_US/sdk.js";
+                if (fjs && fjs.parentNode) {
+                    fjs.parentNode.insertBefore(js, fjs);
+                } else {
+                    d.head.appendChild(js);
+                }
+            }(document, 'script', 'facebook-jssdk'));
+        };
+
+        initSDK();
+    }, []);
+
+    const handleCreateWorkspace = (name: string) => {
+        const newWk: Workspace = {
+            id: `wk_${Date.now()}`,
+            name,
+            metaConnected: false
+        };
+        setWorkspaces([...workspaces, newWk]);
     };
-    initSDK();
-    
-    const reloadHandler = () => window.location.reload();
-    window.addEventListener('sys_config_change', reloadHandler);
-    return () => window.removeEventListener('sys_config_change', reloadHandler);
-  }, []);
 
-  const handleCreateWorkspace = (name: string) => {
-    const newW: Workspace = { id: `wk_${Date.now()}`, name, metaConnected: false };
-    setWorkspaces([...workspaces, newW]);
-  };
+    const handleUpdateWorkspace = (updated: Workspace) => {
+        setWorkspaces(prev => prev.map(w => w.id === updated.id ? updated : w));
+    };
 
-  const handleUpdateWorkspace = (updated: Workspace) => {
-    setWorkspaces(workspaces.map(w => w.id === updated.id ? updated : w));
-  };
-
-  return (
-    <Routes>
-      <Route path="/" element={<Navigate to="/workspaces" replace />} />
-      <Route path="/workspaces" element={<WorkspacesPage workspaces={workspaces} onCreateWorkspace={handleCreateWorkspace} />} />
-      <Route path="/integrations" element={<IntegrationsPage />} />
-      <Route path="/w/:workspaceId/ads/ad/:adId" element={<AdDetailsPage workspaces={workspaces} />} />
-      <Route path="/w/:workspaceId/logs" element={<ActivityLogsPage workspaces={workspaces} />} />
-      <Route path="/w/:workspaceId/reports" element={<CustomReportsPage workspaces={workspaces} />} />
-      <Route path="/w/:workspaceId/dashboard" element={<DashboardPage workspaces={workspaces} sdkReady={sdkReady} />} />
-      <Route path="/w/:workspaceId/ads/*" element={<DashboardPage workspaces={workspaces} sdkReady={sdkReady} />} />
-      <Route path="/w/:workspaceId/setup" element={
-        <WorkspaceSetupWrapper workspaces={workspaces} onUpdate={handleUpdateWorkspace} sdkReady={sdkReady} />
-      } />
-    </Routes>
-  );
+    return (
+        <Routes>
+            <Route path="/" element={<Navigate to="/workspaces" replace />} />
+            <Route path="/workspaces" element={<WorkspacesPage workspaces={workspaces} onCreateWorkspace={handleCreateWorkspace} />} />
+            <Route path="/integrations" element={<IntegrationsPage />} />
+            
+            <Route path="/w/:workspaceId/dashboard" element={<DashboardPage workspaces={workspaces} sdkReady={sdkReady} />} />
+            <Route path="/w/:workspaceId/setup" element={<WorkspaceSetupWrapper workspaces={workspaces} onUpdate={handleUpdateWorkspace} sdkReady={sdkReady} />} />
+            <Route path="/w/:workspaceId/ads/:level/:adId" element={<AdDetailsPage workspaces={workspaces} />} />
+            <Route path="/w/:workspaceId/logs" element={<ActivityLogsPage workspaces={workspaces} />} />
+            <Route path="/w/:workspaceId/reports" element={<CustomReportsPage workspaces={workspaces} />} />
+            
+            <Route path="*" element={<Navigate to="/workspaces" replace />} />
+        </Routes>
+    );
 };
 
 export default App;
