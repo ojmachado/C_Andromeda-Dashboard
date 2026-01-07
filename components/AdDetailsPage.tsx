@@ -1,10 +1,10 @@
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { AppShell } from './Navigation';
 import { Card, Button, Badge, Skeleton } from './UI';
 import { SecureKV } from '../utils/kv';
-import type { Workspace, AdCreativeData, APIGeneralInsights } from '../types';
+import type { Workspace, AdCreativeData, APIGeneralInsights, DateRangePreset } from '../types';
 
 export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
     const { workspaceId, adId } = useParams();
@@ -12,12 +12,27 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
+    // Filter State
+    const [dateRange, setDateRange] = useState<DateRangePreset>('last_30d');
+    const [isDateDropdownOpen, setIsDateDropdownOpen] = useState(false);
+    const dateDropdownRef = useRef<HTMLDivElement>(null);
+
     // Data States
     const [adMeta, setAdMeta] = useState<any>(null);
     const [creative, setCreative] = useState<AdCreativeData | null>(null);
     const [insights, setInsights] = useState<APIGeneralInsights | null>(null);
     const [trendData, setTrendData] = useState<{ date: string, value: number }[]>([]);
-    const [dateRangeLabel, setDateRangeLabel] = useState('Last 30 Days');
+
+    // Close dropdown on click outside
+    useEffect(() => {
+        function handleClickOutside(event: MouseEvent) {
+            if (dateDropdownRef.current && !dateDropdownRef.current.contains(event.target as Node)) {
+                setIsDateDropdownOpen(false);
+            }
+        }
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
 
     useEffect(() => {
         const loadData = async () => {
@@ -33,7 +48,8 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
             }
 
             const apiParams = { access_token: token };
-            const timeParams = { date_preset: 'last_30d' };
+            const timeParams: any = { date_preset: dateRange };
+            if (dateRange === 'maximum') delete timeParams.date_preset; // Fallback to default if max
 
             try {
                 // 1. Fetch Ad Metadata & Creative ID
@@ -47,7 +63,7 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                 // 2. Fetch Insights (Overall)
                 const insightsPromise = new Promise<any>((resolve) => {
                     window.FB.api(`/${adId}/insights`, {
-                        fields: 'spend,impressions,clicks,ctr,cpc,cpm,actions,action_values,purchase_roas',
+                        fields: 'spend,impressions,clicks,ctr,cpc,cpm,actions,action_values,purchase_roas,date_start,date_stop',
                         ...apiParams,
                         ...timeParams
                     }, resolve);
@@ -69,9 +85,9 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                 if (adRes && !adRes.error) {
                     setAdMeta(adRes);
                     if (adRes.creative?.id) {
-                        // Fetch Creative Details
+                        // Fetch Creative Details with extended fields for robustness
                         window.FB.api(`/${adRes.creative.id}`, {
-                            fields: 'name,title,body,image_url,thumbnail_url,object_story_spec,call_to_action_type',
+                            fields: 'name,title,body,image_url,thumbnail_url,object_story_spec,asset_feed_spec,call_to_action_type',
                             ...apiParams
                         }, (creRes: any) => {
                             if (!creRes.error) setCreative(creRes);
@@ -82,9 +98,8 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                 // Process Insights
                 if (insightsRes && insightsRes.data && insightsRes.data.length > 0) {
                     setInsights(insightsRes.data[0]);
-                    const start = new Date(insightsRes.data[0].date_start).toLocaleDateString('pt-BR', { month: 'short', day: 'numeric' });
-                    const end = new Date(insightsRes.data[0].date_stop).toLocaleDateString('pt-BR', { month: 'short', day: 'numeric' });
-                    setDateRangeLabel(`${start} - ${end}`);
+                } else {
+                    setInsights(null); // Reset if no data for period
                 }
 
                 // Process Trend
@@ -92,9 +107,18 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                     const trend = trendRes.data.map((d: any) => ({
                         date: new Date(d.date_start).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
                         value: parseFloat(d.spend || '0')
-                    })).reverse(); // API returns descending usually, but verify
-                    // Ensure correct chronological order
-                    setTrendData(trend.sort((a: any, b: any) => a.date.localeCompare(b.date)));
+                    })).reverse();
+                    
+                    // Sort properly by date object to ensure correct order
+                    trend.sort((a: any, b: any) => {
+                        const [dA, mA] = a.date.split('/');
+                        const [dB, mB] = b.date.split('/');
+                        return new Date(2023, parseInt(mA)-1, parseInt(dA)).getTime() - new Date(2023, parseInt(mB)-1, parseInt(dB)).getTime();
+                    });
+                    
+                    setTrendData(trend);
+                } else {
+                    setTrendData([]);
                 }
 
             } catch (err) {
@@ -106,25 +130,43 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
         };
 
         loadData();
-    }, [workspaceId, adId]);
+    }, [workspaceId, adId, dateRange]);
 
     // --- Data Parsing Helpers ---
 
-    // Extract Creative Image
-    const imageUrl = useMemo(() => {
-        if (!creative) return '';
-        if (creative.image_url) return creative.image_url;
-        if (creative.thumbnail_url) return creative.thumbnail_url;
-        // Deep dive for carousel/video posts
-        return creative.object_story_spec?.link_data?.picture || '';
-    }, [creative]);
+    // Safely extract nested properties
+    const get = (obj: any, path: string) => path.split('.').reduce((acc, part) => acc && acc[part], obj);
 
-    // Extract Text
-    const creativeText = creative?.body || creative?.object_story_spec?.link_data?.message || 'Texto não disponível';
-    const creativeHeadline = creative?.title || creative?.object_story_spec?.link_data?.name || 'Headline não disponível';
-    const creativeDomain = creative?.object_story_spec?.link_data?.link 
-        ? new URL(creative?.object_story_spec?.link_data?.link).hostname.replace('www.', '').toUpperCase() 
-        : 'LINK';
+    // Robust Creative Data Extraction
+    const creativeInfo = useMemo(() => {
+        if (!creative) return { title: '', body: '', image: '', domain: '' };
+
+        const spec = creative.object_story_spec;
+        const assetFeed = creative.asset_feed_spec; // Dynamic Ads
+
+        let title = creative.title || get(spec, 'link_data.name') || get(spec, 'video_data.title') || '';
+        let body = creative.body || get(spec, 'link_data.message') || get(spec, 'video_data.message') || '';
+        let image = creative.image_url || creative.thumbnail_url || get(spec, 'link_data.picture') || get(spec, 'video_data.image_url') || get(spec, 'photo_data.picture') || '';
+        let domain = 'LINK';
+
+        const link = get(spec, 'link_data.link');
+        if (link) {
+            try { domain = new URL(link).hostname.replace('www.', '').toUpperCase(); } catch {}
+        }
+
+        // Fallback for Dynamic Creative (Asset Feed)
+        if (assetFeed) {
+             const firstTitle = get(assetFeed, 'titles.0.text');
+             const firstBody = get(assetFeed, 'bodies.0.text');
+             const firstImage = get(assetFeed, 'images.0.url');
+             
+             if (!title) title = firstTitle;
+             if (!body) body = firstBody;
+             if (!image) image = firstImage;
+        }
+
+        return { title, body, image, domain };
+    }, [creative]);
 
     // Metrics Calculation
     const spend = parseFloat(insights?.spend || '0');
@@ -142,7 +184,6 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
     // Fallback for Purchases (can be pixel purchase or offsite_conversion)
     const purchases = getActionCount('purchase') || getActionCount('offsite_conversion.fb_pixel_purchase');
     const leads = getActionCount('lead') || getActionCount('on_facebook_lead');
-    const initiateCheckout = getActionCount('initiate_checkout') || getActionCount('offsite_conversion.fb_pixel_initiate_checkout');
     
     // Cost per Action
     const cpa = purchases > 0 ? spend / purchases : 0;
@@ -157,13 +198,19 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
             const y = height - (d.value / maxVal) * height;
             return `${x},${y}`;
         });
-        
-        // Simple smoothing (Catmull-Rom or similar could be better, but basic bezier for now)
-        // For simplicity in this XML response, straight lines or simple quad curves:
         return `M ${points.join(' L ')}`;
     };
 
-    if (isLoading) {
+    const dateLabels: Record<string, string> = {
+        'last_7d': 'Últimos 7 dias',
+        'last_30d': 'Últimos 30 dias',
+        'this_month': 'Este Mês',
+        'last_month': 'Mês Passado',
+        'lifetime': 'Vitalício',
+        'maximum': 'Máximo'
+    };
+
+    if (isLoading && !creative) { // Only full load if initial
         return (
             <AppShell workspaces={workspaces} activeWorkspaceId={workspaceId}>
                 <div className="p-6 max-w-[1400px] mx-auto space-y-6">
@@ -188,15 +235,35 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                     {/* Header */}
                     <div className="flex flex-col md:flex-row items-center justify-between gap-4 border-b border-border-dark pb-6">
                         <div className="flex items-center gap-2 text-sm w-full md:w-auto overflow-x-auto whitespace-nowrap">
-                            <Link to={`/w/${workspaceId}/dashboard`} className="text-text-secondary hover:text-white transition-colors">Campanhas</Link>
+                            <Link to={`/w/${workspaceId}/dashboard`} className="text-text-secondary hover:text-white transition-colors">Dashboard</Link>
                             <span className="text-text-secondary material-symbols-outlined text-[12px]">chevron_right</span>
                             <span className="text-slate-900 dark:text-white font-medium">{adMeta?.name || 'Anúncio'}</span>
                         </div>
-                        <div className="flex items-center gap-4 w-full md:w-auto">
-                            <button className="flex items-center gap-2 bg-white dark:bg-[#292348] hover:bg-gray-100 dark:hover:bg-[#342c5a] text-slate-700 dark:text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors border border-gray-200 dark:border-transparent w-full md:w-auto justify-center">
+                        
+                        {/* Date Filter */}
+                        <div className="relative" ref={dateDropdownRef}>
+                            <button 
+                                onClick={() => setIsDateDropdownOpen(!isDateDropdownOpen)}
+                                className="flex items-center gap-2 bg-white dark:bg-[#292348] hover:bg-gray-100 dark:hover:bg-[#342c5a] text-slate-700 dark:text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors border border-gray-200 dark:border-transparent w-full md:w-auto justify-center"
+                            >
                                 <span className="material-symbols-outlined text-[18px]">calendar_today</span>
-                                <span>{dateRangeLabel}</span>
+                                <span>{dateLabels[dateRange] || dateRange}</span>
+                                <span className="material-symbols-outlined text-[18px]">expand_more</span>
                             </button>
+                            
+                            {isDateDropdownOpen && (
+                                <div className="absolute top-full right-0 mt-2 w-48 bg-card-dark border border-border-dark rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2">
+                                    {Object.entries(dateLabels).map(([key, label]) => (
+                                        <button 
+                                            key={key}
+                                            onClick={() => { setDateRange(key as DateRangePreset); setIsDateDropdownOpen(false); }}
+                                            className={`w-full text-left px-4 py-2.5 text-sm hover:bg-white/5 transition-colors ${dateRange === key ? 'text-primary font-bold bg-white/5' : 'text-text-secondary'}`}
+                                        >
+                                            {label}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     </div>
 
@@ -204,9 +271,11 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                     <div className="flex flex-wrap items-center justify-between gap-4">
                         <div className="flex items-center gap-4">
                             <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Detalhes do Anúncio</h2>
-                            <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border ${adMeta?.status === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-slate-500/10 text-slate-500 border-slate-500/20'}`}>
-                                {adMeta?.status || 'UNKNOWN'}
-                            </span>
+                            {adMeta?.status && (
+                                <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border ${adMeta.status === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-slate-500/10 text-slate-500 border-slate-500/20'}`}>
+                                    {adMeta.status}
+                                </span>
+                            )}
                         </div>
                         <button 
                             onClick={() => navigate(`/w/${workspaceId}/dashboard`)}
@@ -234,21 +303,24 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                                     </div>
                                 </div>
                                 <div className="p-3 pb-1">
-                                    <p className="text-sm text-slate-700 dark:text-gray-300 line-clamp-3 whitespace-pre-wrap">{creativeText}</p>
+                                    <p className="text-sm text-slate-700 dark:text-gray-300 line-clamp-3 whitespace-pre-wrap">
+                                        {creativeInfo.body || <span className="text-text-secondary italic">Texto não disponível</span>}
+                                    </p>
                                 </div>
-                                <div className="w-full aspect-square bg-gray-800 relative mt-2 overflow-hidden">
-                                    {imageUrl ? (
-                                        <div className="absolute inset-0 bg-contain bg-center bg-no-repeat bg-[#000]" style={{ backgroundImage: `url("${imageUrl}")` }}></div>
-                                    ) : (
-                                        <div className="flex items-center justify-center h-full text-text-secondary">
-                                            <span className="material-symbols-outlined text-4xl">image_not_supported</span>
+                                <div className="w-full aspect-square bg-gray-800 relative mt-2 overflow-hidden bg-center bg-cover" 
+                                     style={creativeInfo.image ? { backgroundImage: `url("${creativeInfo.image}")` } : {}}
+                                >
+                                    {!creativeInfo.image && (
+                                        <div className="absolute inset-0 flex flex-col items-center justify-center text-text-secondary bg-gray-900">
+                                            <span className="material-symbols-outlined text-4xl mb-2">image_not_supported</span>
+                                            <span className="text-xs">Visualização indisponível</span>
                                         </div>
                                     )}
                                 </div>
                                 <div className="bg-gray-50 dark:bg-[#25213a] p-3 flex justify-between items-center">
                                     <div className="overflow-hidden mr-2">
-                                        <p className="text-xs font-semibold text-slate-500 dark:text-text-secondary truncate">{creativeDomain}</p>
-                                        <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{creativeHeadline}</p>
+                                        <p className="text-xs font-semibold text-slate-500 dark:text-text-secondary truncate">{creativeInfo.domain}</p>
+                                        <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{creativeInfo.title || 'Headline não disponível'}</p>
                                     </div>
                                     <button className="shrink-0 bg-gray-200 dark:bg-[#383355] hover:bg-gray-300 dark:hover:bg-[#454066] text-slate-900 dark:text-white text-xs font-semibold py-1.5 px-3 rounded border border-gray-300 dark:border-transparent transition-colors uppercase">
                                         {creative?.call_to_action_type?.replace(/_/g, ' ') || 'Saiba Mais'}
@@ -256,7 +328,10 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                                 </div>
                                 <div className="p-3 flex items-center justify-between text-slate-500 dark:text-text-secondary border-t border-gray-100 dark:border-[#292348]/50 text-xs">
                                      <span>ID: {adId}</span>
-                                     <span>Preview Mode</span>
+                                     <span className="flex items-center gap-1">
+                                         <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                                         Preview
+                                     </span>
                                 </div>
                             </div>
                         </div>
@@ -266,7 +341,7 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                             
                             {/* KPI Cards */}
                             <div className="flex flex-col gap-4">
-                                <h3 className="text-sm font-semibold text-slate-500 dark:text-text-secondary uppercase tracking-wider">Performance Geral</h3>
+                                <h3 className="text-sm font-semibold text-slate-500 dark:text-text-secondary uppercase tracking-wider">Performance ({dateLabels[dateRange]})</h3>
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                     <KpiDetailCard label="Valor Gasto" value={spend.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} icon="payments" trend="up" />
                                     <KpiDetailCard label="Impressões" value={impressions.toLocaleString()} icon="visibility" trend="neutral" />
@@ -318,7 +393,8 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                             {/* Main Chart */}
                             <div className="bg-white dark:bg-[#1e1b2e] p-6 rounded-xl border border-gray-200 dark:border-[#292348] shadow-sm flex flex-col flex-1 min-h-[300px]">
                                 <div className="flex items-center justify-between mb-6">
-                                    <h3 className="text-base font-bold text-slate-900 dark:text-white">Evolução de Investimento (Daily Spend)</h3>
+                                    <h3 className="text-base font-bold text-slate-900 dark:text-white">Evolução de Investimento</h3>
+                                    {isLoading && <span className="text-xs text-text-secondary animate-pulse">Atualizando...</span>}
                                 </div>
                                 {/* Pure CSS/SVG Chart */}
                                 <div className="relative w-full h-full flex items-end justify-between px-2 gap-2 mt-4 min-h-[200px]">
@@ -357,7 +433,9 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                                             />
                                         </svg>
                                     ) : (
-                                        <div className="absolute inset-0 flex items-center justify-center text-text-secondary text-sm">Sem dados de tendência suficientes.</div>
+                                        <div className="absolute inset-0 flex items-center justify-center text-text-secondary text-sm">
+                                            {isLoading ? "Carregando..." : "Sem dados de tendência suficientes para este período."}
+                                        </div>
                                     )}
                                 </div>
                                 {/* X Axis Labels (Simplified) */}
@@ -373,7 +451,7 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                     {/* Bottom Section: Actions Table */}
                     <div className="flex flex-col gap-4">
                         <div className="flex flex-wrap items-center justify-between gap-4">
-                            <h3 className="text-sm font-semibold text-slate-500 dark:text-text-secondary uppercase tracking-wider">Ações e Conversões (Totais do Período)</h3>
+                            <h3 className="text-sm font-semibold text-slate-500 dark:text-text-secondary uppercase tracking-wider">Ações e Conversões</h3>
                         </div>
                         <div className="bg-white dark:bg-[#1e1b2e] rounded-xl border border-gray-200 dark:border-[#292348] shadow-sm overflow-hidden">
                             <div className="overflow-x-auto">

@@ -60,6 +60,7 @@ export interface AdCreativeData {
   image_url?: string;
   thumbnail_url?: string;
   object_story_spec?: any;
+  asset_feed_spec?: any; // For Dynamic Creative Ads
   call_to_action_type?: string;
 }
 
@@ -102,7 +103,7 @@ export interface APIDailyTrend {
   date_stop: string;
 }
 
-export type DateRangePreset = 'last_7d' | 'last_30d' | 'this_month' | 'last_month' | 'custom';
+export type DateRangePreset = 'last_7d' | 'last_30d' | 'this_month' | 'last_month' | 'lifetime' | 'maximum' | 'custom';
 
 export interface ActivityLog {
   id: string;
