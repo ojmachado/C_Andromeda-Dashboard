@@ -49,6 +49,9 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
   const [selectedObjectives, setSelectedObjectives] = useState<string[]>([]);
   const [isObjDropdownOpen, setIsObjDropdownOpen] = useState(false);
   const objDropdownRef = useRef<HTMLDivElement>(null);
+  
+  // Request tracking to prevent race conditions
+  const requestRef = useRef<number>(0);
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -64,6 +67,9 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
   const fetchData = async () => {
       // Allow demo workspace to load even if SDK not ready
       if (!sdkReady && workspaceId !== 'wk_demo') return; 
+
+      const requestId = Date.now();
+      requestRef.current = requestId;
 
       const loadingState = isRefreshing ? setIsRefreshing : setIsLoading;
       loadingState(true);
@@ -92,7 +98,8 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
       // --- DEMO DATA ---
       if (isDemo) {
              await new Promise(r => setTimeout(r, 800)); // Simulate network
-             
+             if (requestRef.current !== requestId) return;
+
              setStats({
                  spend: 1249.73,
                  impressions: 82569,
@@ -203,89 +210,104 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
           }, (res: any) => resolve(res));
       });
 
-      const [insightsRes, listRes, trendRes] = await Promise.all([p1, p2, p3]);
+      try {
+          const [insightsRes, listRes, trendRes] = await Promise.all([p1, p2, p3]);
       
-      // Process Overview
-      if (insightsRes && !insightsRes.error && insightsRes.data?.[0]) {
-          setStats(insightsRes.data[0]);
-      } else {
-          setStats(null);
-      }
-      
-      // Helper function for metrics
-      const getActionVal = (actions: any[], type: string) => {
-          if (!actions) return 0;
-          // Check for exact match or general messaging event
-          const action = actions.find((a: any) => a.action_type === type);
-          return action ? parseFloat(action.value) : 0;
-      };
+          // Prevent race conditions: if a new request started, ignore this one
+          if (requestRef.current !== requestId) return;
 
-      // Process List
-      if (listRes && listRes.data) {
-          const formatted = listRes.data.map((c: any) => {
-              const i: APIGeneralInsights = c.insights?.data?.[0] || {};
-              const spend = parseFloat(i.spend || '0');
-              const impressions = parseInt(i.impressions || '0');
-              
-              const purchaseAction = i.actions?.find(a => a.action_type === 'purchase' || a.action_type === 'offsite_conversion.fb_pixel_purchase');
-              const purchases = purchaseAction ? parseFloat(purchaseAction.value) : 0;
-              const roasVal = i.purchase_roas?.[0]?.value ? parseFloat(i.purchase_roas[0].value) : 0;
-              const cpa = purchases > 0 ? spend / purchases : 0;
-              
-              // Conversions
-              const messages = getActionVal(i.actions, 'onsite_conversion.messaging_conversation_started_7d');
-              const costPerConversation = messages > 0 ? spend / messages : 0;
-
-              // Resolve Objective and Campaign Name/Link
-              let objective = c.objective;
-              let campaignName = undefined;
-              let campaignDetailsLink = undefined;
-              
-              if (c.campaign) {
-                  if (c.campaign.objective) objective = c.campaign.objective;
-                  if (c.campaign.name) campaignName = c.campaign.name;
-                  if (c.campaign.id) campaignDetailsLink = `#/w/${workspaceId}/ads/campaign/${c.campaign.id}`;
-              }
-
-              return {
-                  id: c.id,
-                  name: c.name,
-                  campaignName,
-                  campaignDetailsLink,
-                  status: c.status,
-                  objective: objective,
-                  adPreviewLink: c.preview_shareable_link || undefined,
-                  detailsLink: `#/w/${workspaceId}/ads/${viewLevel}/${c.id}`, // Build Hash Link
-                  spend,
-                  impressions,
-                  clicks: parseInt(i.clicks || '0'),
-                  ctr: parseFloat(i.ctr || '0'),
-                  cpm: parseFloat(i.cpm || '0'),
-                  cpc: parseFloat(i.cpc || '0'),
-                  roas: roasVal,
-                  cpa: cpa,
-                  messages,
-                  costPerConversation
-              };
-          });
+          // Process Overview
+          if (insightsRes && !insightsRes.error && insightsRes.data?.[0]) {
+              setStats(insightsRes.data[0]);
+          } else {
+              setStats(null);
+          }
           
-          // Filter out items with 0 impressions (No Delivery)
-          const filteredByDelivery = formatted.filter((item: InsightData) => item.impressions > 0);
-          setCampaigns(filteredByDelivery);
-      }
+          // Helper function for metrics
+          const getActionVal = (actions: any[], type: string) => {
+              if (!actions) return 0;
+              // Check for exact match or general messaging event
+              const action = actions.find((a: any) => a.action_type === type);
+              return action ? parseFloat(action.value) : 0;
+          };
 
-      // Process Trend
-      if (trendRes && !trendRes.error && trendRes.data) {
-          const trend = trendRes.data.map((d: any) => ({
-              date: new Date(d.date_start).toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'}),
-              value: parseFloat(d.spend || '0')
-          })).reverse();
-          setTrendData(trend);
-      } else {
-          setTrendData([]);
-      }
+          // Process List
+          if (listRes && listRes.data) {
+              const formatted = listRes.data.map((c: any) => {
+                  const i: APIGeneralInsights = c.insights?.data?.[0] || {};
+                  const spend = parseFloat(i.spend || '0');
+                  const impressions = parseInt(i.impressions || '0');
+                  
+                  const purchaseAction = i.actions?.find(a => a.action_type === 'purchase' || a.action_type === 'offsite_conversion.fb_pixel_purchase');
+                  const purchases = purchaseAction ? parseFloat(purchaseAction.value) : 0;
+                  const roasVal = i.purchase_roas?.[0]?.value ? parseFloat(i.purchase_roas[0].value) : 0;
+                  const cpa = purchases > 0 ? spend / purchases : 0;
+                  
+                  // Conversions
+                  const messages = getActionVal(i.actions, 'onsite_conversion.messaging_conversation_started_7d');
+                  const costPerConversation = messages > 0 ? spend / messages : 0;
 
-      loadingState(false);
+                  // Resolve Objective and Campaign Name/Link
+                  let objective = c.objective;
+                  let campaignName = undefined;
+                  let campaignDetailsLink = undefined;
+                  
+                  if (c.campaign) {
+                      if (c.campaign.objective) objective = c.campaign.objective;
+                      if (c.campaign.name) campaignName = c.campaign.name;
+                      if (c.campaign.id) campaignDetailsLink = `#/w/${workspaceId}/ads/campaign/${c.campaign.id}`;
+                  }
+
+                  return {
+                      id: c.id,
+                      name: c.name,
+                      campaignName,
+                      campaignDetailsLink,
+                      status: c.status,
+                      objective: objective,
+                      adPreviewLink: c.preview_shareable_link || undefined,
+                      detailsLink: `#/w/${workspaceId}/ads/${viewLevel}/${c.id}`, // Build Hash Link
+                      spend,
+                      impressions,
+                      clicks: parseInt(i.clicks || '0'),
+                      ctr: parseFloat(i.ctr || '0'),
+                      cpm: parseFloat(i.cpm || '0'),
+                      cpc: parseFloat(i.cpc || '0'),
+                      roas: roasVal,
+                      cpa: cpa,
+                      messages,
+                      costPerConversation
+                  };
+              });
+              
+              // Filter out items with 0 impressions (No Delivery)
+              const filteredByDelivery = formatted.filter((item: InsightData) => item.impressions > 0);
+              setCampaigns(filteredByDelivery);
+          } else {
+              setCampaigns([]);
+          }
+
+          // Process Trend
+          if (trendRes && !trendRes.error && trendRes.data) {
+              const trend = trendRes.data.map((d: any) => ({
+                  date: new Date(d.date_start).toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'}),
+                  value: parseFloat(d.spend || '0')
+              })).reverse();
+              setTrendData(trend);
+          } else {
+              setTrendData([]);
+          }
+      } catch (e) {
+          console.error("Fetch failed", e);
+          if (requestRef.current === requestId) {
+             setCampaigns([]);
+             setStats(null);
+          }
+      } finally {
+          if (requestRef.current === requestId) {
+              loadingState(false);
+          }
+      }
   };
 
   useEffect(() => {
