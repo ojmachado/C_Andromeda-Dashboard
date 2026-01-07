@@ -237,7 +237,9 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
     // Fallback for Purchases (can be pixel purchase or offsite_conversion)
     const purchases = getActionCount('purchase') || getActionCount('offsite_conversion.fb_pixel_purchase');
     const leads = getActionCount('lead') || getActionCount('on_facebook_lead');
+    
     // Enhanced Messaging check for various attributions
+    // Meta sometimes changes keys, checking both onsite 7d and generic
     const messages = 
         getActionCount('onsite_conversion.messaging_conversation_started_7d') || 
         getActionCount('messaging_conversation_started_7d');
@@ -502,7 +504,7 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                                         </div>
                                     </div>
 
-                                    {/* Messages Card */}
+                                    {/* Messages Card - NEW ADDITION */}
                                     <div className="bg-white dark:bg-[#1e1b2e] p-4 rounded-xl border border-gray-200 dark:border-[#292348] shadow-sm relative overflow-hidden group">
                                         <div className="absolute inset-0 bg-sky-500/5 dark:bg-sky-500/10 group-hover:bg-sky-500/20 transition-colors"></div>
                                         <div className="relative z-10">
