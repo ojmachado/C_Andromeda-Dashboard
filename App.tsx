@@ -146,8 +146,8 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
                  detailsLink: `#/w/${workspaceId}/ads/${viewLevel}/${c.id}`
              }));
              
-             // Filter Demo Data (Impressions > 0)
-             setCampaigns(processedDemoItems.filter(i => i.impressions > 0));
+             // Show all demo data regardless of impressions
+             setCampaigns(processedDemoItems);
              
              // Mock Trend Data
              const trend = Array.from({length: 15}, (_, i) => ({
@@ -184,7 +184,7 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
           window.FB.api(`/${accountId}/${levelPath}`, { 
               access_token: token, 
               fields: listFields,
-              limit: 50
+              limit: 500 // Increased limit to show more items
           }, async (res: any) => {
                if(!res.data) { resolve(res); return; }
                const items = res.data;
@@ -280,9 +280,8 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
                   };
               });
               
-              // Filter out items with 0 impressions (No Delivery)
-              const filteredByDelivery = formatted.filter((item: InsightData) => item.impressions > 0);
-              setCampaigns(filteredByDelivery);
+              // Show all items regardless of delivery status (removed filter)
+              setCampaigns(formatted);
           } else {
               setCampaigns([]);
           }
