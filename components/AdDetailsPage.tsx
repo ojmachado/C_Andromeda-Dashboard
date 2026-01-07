@@ -65,14 +65,23 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                 const insightsPromise = new Promise<any>((resolve) => {
                     window.FB.api(`/${adId}/insights`, {
                         fields: 'spend,impressions,clicks,ctr,cpc,cpm,actions,action_values,purchase_roas,date_start,date_stop',
-                        ...apiParams,
-                        ...timeParams
-                    }, resolve);
+                        ...apiParams
+                        // Note: date_preset passed via spread timeParams
+                    }, (res: any) => {
+                         // FB API quirk: sometimes passing date_preset in main object works better for insights
+                         if(!res || res.error) {
+                             // Retry logic or error handling could go here
+                             resolve(res);
+                         } else {
+                             resolve(res);
+                         }
+                    });
                 });
-
-                // 3. Fetch Trend (Daily Spend/Results)
+                
+                // Note: For trend, we need a separate call if we want breakdown by day
+                // However, the standard `insights` endpoint supports `time_increment=1`
                 const trendPromise = new Promise<any>((resolve) => {
-                    window.FB.api(`/${adId}/insights`, {
+                     window.FB.api(`/${adId}/insights`, {
                         fields: 'spend,date_start',
                         time_increment: 1,
                         ...apiParams,
@@ -80,7 +89,20 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                     }, resolve);
                 });
 
-                const [adRes, insightsRes, trendRes] = await Promise.all([adPromise, insightsPromise, trendPromise]);
+                // Trigger calls
+                // Re-wrapping insights call to ensure timeParams are correctly applied for the specific endpoint logic if needed
+                // For simplicity assuming apiParams/timeParams are correct as per previous working code
+                
+                // Actual execution:
+                const [adRes, insightsRes, trendRes] = await Promise.all([
+                    adPromise,
+                    new Promise<any>((resolve) => window.FB.api(`/${adId}/insights`, {
+                        fields: 'spend,impressions,clicks,ctr,cpc,cpm,actions,action_values,purchase_roas,date_start,date_stop',
+                        ...apiParams,
+                        ...timeParams
+                    }, resolve)),
+                    trendPromise
+                ]);
 
                 // Process Ad & Creative
                 if (adRes && !adRes.error) {
@@ -323,37 +345,45 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                         {/* Col 1: Creative Preview */}
                         <div className="xl:col-span-1 flex flex-col gap-4">
                             <h3 className="text-sm font-semibold text-slate-500 dark:text-text-secondary uppercase tracking-wider">Criativo</h3>
-                            <div className="bg-white dark:bg-[#1e1b2e] rounded-xl border border-gray-200 dark:border-[#292348] overflow-hidden shadow-sm">
+                            <div className="bg-white dark:bg-[#1e1b2e] rounded-xl border border-gray-200 dark:border-[#292348] overflow-hidden shadow-sm flex flex-col">
                                 <div className="p-3 flex items-center gap-3 border-b border-gray-100 dark:border-[#292348]/50 bg-gray-50 dark:bg-[#25213a]">
-                                    <div className="size-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-xs shadow-md">
+                                    <div className="size-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-xs shadow-md shrink-0">
                                         {creative?.name?.substring(0,2).toUpperCase() || 'AD'}
                                     </div>
-                                    <div className="flex flex-col">
-                                        <p className="text-xs font-bold text-slate-900 dark:text-white truncate max-w-[200px]">{creative?.name || 'Ad Name'}</p>
+                                    <div className="flex flex-col min-w-0">
+                                        <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{creative?.name || 'Ad Name'}</p>
                                         <p className="text-[10px] text-slate-500 dark:text-text-secondary">Patrocinado • <span className="material-symbols-outlined text-[10px] align-middle">public</span></p>
                                     </div>
                                 </div>
                                 <div className="p-4 pb-2">
-                                    <p className="text-sm text-slate-700 dark:text-gray-300 line-clamp-3 whitespace-pre-wrap leading-relaxed">
+                                    <p className="text-sm text-slate-700 dark:text-gray-300 line-clamp-6 whitespace-pre-wrap leading-relaxed break-words">
                                         {creativeInfo.body || <span className="text-text-secondary italic">Texto não disponível</span>}
                                     </p>
                                 </div>
-                                <div className="w-full aspect-square bg-gray-900 relative mt-2 overflow-hidden bg-center bg-cover border-y border-gray-100 dark:border-[#292348]/50" 
-                                     style={creativeInfo.image ? { backgroundImage: `url("${creativeInfo.image}")` } : {}}
-                                >
-                                    {!creativeInfo.image && (
-                                        <div className="absolute inset-0 flex flex-col items-center justify-center text-text-secondary">
+                                
+                                {/* Image Container - Aspect Ratio Fix */}
+                                <div className="w-full relative mt-2 bg-gray-100 dark:bg-black/20 border-y border-gray-100 dark:border-[#292348]/50 min-h-[200px] flex items-center justify-center">
+                                    {creativeInfo.image ? (
+                                        <img 
+                                            src={creativeInfo.image} 
+                                            alt="Ad Creative" 
+                                            className="w-full h-auto max-h-[600px] object-contain"
+                                            loading="lazy"
+                                        />
+                                    ) : (
+                                        <div className="flex flex-col items-center justify-center text-text-secondary py-12">
                                             <span className="material-symbols-outlined text-4xl mb-2">image_not_supported</span>
                                             <span className="text-xs">Preview indisponível</span>
                                         </div>
                                     )}
                                 </div>
+
                                 <div className="bg-gray-100 dark:bg-[#25213a] p-3 flex justify-between items-center">
-                                    <div className="overflow-hidden mr-2">
-                                        <p className="text-xs font-semibold text-slate-500 dark:text-text-secondary truncate">{creativeInfo.domain}</p>
-                                        <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{creativeInfo.title || 'Headline'}</p>
+                                    <div className="overflow-hidden mr-2 flex-1">
+                                        <p className="text-[10px] font-semibold text-slate-500 dark:text-text-secondary truncate uppercase tracking-wider mb-0.5">{creativeInfo.domain}</p>
+                                        <p className="text-sm font-bold text-slate-900 dark:text-white line-clamp-2 leading-snug">{creativeInfo.title || 'Headline'}</p>
                                     </div>
-                                    <button className="shrink-0 bg-gray-300 dark:bg-[#383355] hover:bg-gray-400 dark:hover:bg-[#454066] text-slate-900 dark:text-white text-xs font-bold py-2 px-4 rounded border border-gray-300 dark:border-transparent transition-colors uppercase">
+                                    <button className="shrink-0 bg-gray-300 dark:bg-[#383355] hover:bg-gray-400 dark:hover:bg-[#454066] text-slate-900 dark:text-white text-[10px] font-bold py-2 px-3 rounded border border-gray-300 dark:border-transparent transition-colors uppercase whitespace-nowrap">
                                         {creative?.call_to_action_type?.replace(/_/g, ' ') || 'Saiba Mais'}
                                     </button>
                                 </div>
