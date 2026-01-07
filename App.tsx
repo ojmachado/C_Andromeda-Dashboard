@@ -105,19 +105,41 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
                      { action_type: 'onsite_conversion.messaging_conversation_started_7d', value: 45 }
                  ]
              });
-             const demoItems = [
-                 { id: 'c1', name: '[LRM][TRAFEGO][PERFIL][CBO][NATAL]', status: 'ACTIVE', objective: 'OUTCOME_TRAFFIC', spend: 749.73, impressions: 52569, clicks: 800, ctr: 2.90, cpm: 14.0, cpc: 0.49, roas: 4.2, cpa: 12.50, messages: 32, costPerConversation: 23.42, adPreviewLink: 'https://facebook.com', campaignName: 'Campanha de Natal' },
-                 { id: 'c2', name: '[INSTITUCIONAL][BRANDING][2024]', status: 'PAUSED', objective: 'OUTCOME_AWARENESS', spend: 299.23, impressions: 20569, clicks: 440, ctr: 2.1, cpm: 14.5, cpc: 0.68, roas: 1.5, cpa: 45.00, messages: 13, costPerConversation: 23.01, campaignName: 'Branding 2024' },
-                 { id: 'c3', name: '[CONVERSAO][LAL 1%][COMPRADORES]', status: 'ACTIVE', objective: 'OUTCOME_SALES', adPreviewLink: 'https://facebook.com', spend: 500.00, impressions: 9500, clicks: 200, ctr: 2.1, cpm: 52.6, cpc: 2.50, roas: 5.5, cpa: 25.00, messages: 5, costPerConversation: 100, campaignName: 'Sales Conversion' },
-                 { id: 'c4', name: '[TESTE][SEM ENTREGA]', status: 'PAUSED', objective: 'OUTCOME_TRAFFIC', spend: 0, impressions: 0, clicks: 0, ctr: 0, cpm: 0, cpc: 0, roas: 0, cpa: 0, messages: 0, costPerConversation: 0, campaignName: 'Tests' }
-             ].map(c => ({
+
+             // Construct Demo Data based on View Level
+             let demoItems: InsightData[] = [];
+             
+             if (viewLevel === 'ad') {
+                 demoItems = [
+                     { id: 'ad1', name: 'Instagram Post: Promoção Natal', status: 'ACTIVE', objective: 'OUTCOME_TRAFFIC', spend: 749.73, impressions: 52569, clicks: 800, ctr: 2.90, cpm: 14.0, cpc: 0.49, roas: 4.2, cpa: 12.50, messages: 32, costPerConversation: 23.42, adPreviewLink: 'https://facebook.com', campaignName: '[LRM][TRAFEGO][PERFIL][CBO][NATAL]', campaignDetailsLink: `#/w/${workspaceId}/ads/campaign/c1` },
+                     { id: 'ad2', name: 'Reels: Branding Video V2', status: 'PAUSED', objective: 'OUTCOME_AWARENESS', spend: 299.23, impressions: 20569, clicks: 440, ctr: 2.1, cpm: 14.5, cpc: 0.68, roas: 1.5, cpa: 45.00, messages: 13, costPerConversation: 23.01, campaignName: '[INSTITUCIONAL][BRANDING][2024]', campaignDetailsLink: `#/w/${workspaceId}/ads/campaign/c2` },
+                     { id: 'ad3', name: 'Carrossel: LAL 1%', status: 'ACTIVE', objective: 'OUTCOME_SALES', adPreviewLink: 'https://facebook.com', spend: 500.00, impressions: 9500, clicks: 200, ctr: 2.1, cpm: 52.6, cpc: 2.50, roas: 5.5, cpa: 25.00, messages: 5, costPerConversation: 100, campaignName: '[CONVERSAO][LAL 1%][COMPRADORES]', campaignDetailsLink: `#/w/${workspaceId}/ads/campaign/c3` },
+                     { id: 'ad4', name: 'Story: Teste Copy A', status: 'PAUSED', objective: 'OUTCOME_TRAFFIC', spend: 0, impressions: 0, clicks: 0, ctr: 0, cpm: 0, cpc: 0, roas: 0, cpa: 0, messages: 0, costPerConversation: 0, campaignName: '[TESTE][SEM ENTREGA]', campaignDetailsLink: `#/w/${workspaceId}/ads/campaign/c4` }
+                 ];
+             } else if (viewLevel === 'adset') {
+                 demoItems = [
+                     { id: 'as1', name: 'Conjunto: Aberto - Brasil', status: 'ACTIVE', objective: 'OUTCOME_TRAFFIC', spend: 349.73, impressions: 25000, clicks: 400, ctr: 1.6, cpm: 14.0, cpc: 0.87, roas: 2.2, cpa: 12.50, messages: 15, costPerConversation: 23.42, campaignName: '[LRM][TRAFEGO][PERFIL][CBO][NATAL]', campaignDetailsLink: `#/w/${workspaceId}/ads/campaign/c1` },
+                     { id: 'as2', name: 'Conjunto: Lookalike 1%', status: 'ACTIVE', objective: 'OUTCOME_SALES', spend: 400.00, impressions: 27569, clicks: 400, ctr: 1.45, cpm: 14.0, cpc: 1.0, roas: 3.5, cpa: 12.50, messages: 17, costPerConversation: 23.42, campaignName: '[LRM][TRAFEGO][PERFIL][CBO][NATAL]', campaignDetailsLink: `#/w/${workspaceId}/ads/campaign/c1` },
+                     { id: 'as3', name: 'Conjunto: Interesses (Marketing)', status: 'PAUSED', objective: 'OUTCOME_AWARENESS', spend: 299.23, impressions: 20569, clicks: 440, ctr: 2.1, cpm: 14.5, cpc: 0.68, roas: 1.5, cpa: 45.00, messages: 13, costPerConversation: 23.01, campaignName: '[INSTITUCIONAL][BRANDING][2024]', campaignDetailsLink: `#/w/${workspaceId}/ads/campaign/c2` },
+                     { id: 'as4', name: 'Conjunto: Remarketing 30D', status: 'ACTIVE', objective: 'OUTCOME_SALES', spend: 100.00, impressions: 4500, clicks: 100, ctr: 2.2, cpm: 22.0, cpc: 1.0, roas: 8.0, cpa: 10.00, messages: 2, costPerConversation: 50.00, campaignName: '[CONVERSAO][LAL 1%][COMPRADORES]', campaignDetailsLink: `#/w/${workspaceId}/ads/campaign/c3` }
+                 ];
+             } else {
+                 // Campaign View
+                 demoItems = [
+                     { id: 'c1', name: '[LRM][TRAFEGO][PERFIL][CBO][NATAL]', status: 'ACTIVE', objective: 'OUTCOME_TRAFFIC', spend: 749.73, impressions: 52569, clicks: 800, ctr: 2.90, cpm: 14.0, cpc: 0.49, roas: 4.2, cpa: 12.50, messages: 32, costPerConversation: 23.42, adPreviewLink: 'https://facebook.com' },
+                     { id: 'c2', name: '[INSTITUCIONAL][BRANDING][2024]', status: 'PAUSED', objective: 'OUTCOME_AWARENESS', spend: 299.23, impressions: 20569, clicks: 440, ctr: 2.1, cpm: 14.5, cpc: 0.68, roas: 1.5, cpa: 45.00, messages: 13, costPerConversation: 23.01, },
+                     { id: 'c3', name: '[CONVERSAO][LAL 1%][COMPRADORES]', status: 'ACTIVE', objective: 'OUTCOME_SALES', adPreviewLink: 'https://facebook.com', spend: 500.00, impressions: 9500, clicks: 200, ctr: 2.1, cpm: 52.6, cpc: 2.50, roas: 5.5, cpa: 25.00, messages: 5, costPerConversation: 100 },
+                     { id: 'c4', name: '[TESTE][SEM ENTREGA]', status: 'PAUSED', objective: 'OUTCOME_TRAFFIC', spend: 0, impressions: 0, clicks: 0, ctr: 0, cpm: 0, cpc: 0, roas: 0, cpa: 0, messages: 0, costPerConversation: 0 }
+                 ];
+             }
+
+             const processedDemoItems = demoItems.map(c => ({
                  ...c, 
-                 detailsLink: `#/w/${workspaceId}/ads/${viewLevel}/${c.id}`,
-                 campaignDetailsLink: `#/w/${workspaceId}/ads/campaign/demo_cp_id`
+                 detailsLink: `#/w/${workspaceId}/ads/${viewLevel}/${c.id}`
              }));
              
              // Filter Demo Data (Impressions > 0)
-             setCampaigns(demoItems.filter(i => i.impressions > 0));
+             setCampaigns(processedDemoItems.filter(i => i.impressions > 0));
              
              // Mock Trend Data
              const trend = Array.from({length: 15}, (_, i) => ({
@@ -552,7 +574,7 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
                         Performance por {viewLevel === 'campaign' ? 'Campanha' : viewLevel === 'adset' ? 'Conjunto de Anúncios' : 'Anúncio'}
                     </h3>
                 </div>
-                <DataTable data={filteredCampaigns} isLoading={isLoading && !isRefreshing} />
+                <DataTable data={filteredCampaigns} isLoading={isLoading && !isRefreshing} viewLevel={viewLevel} />
             </div>
 
             {/* Date Modal */}
@@ -589,313 +611,77 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
   );
 };
 
-// ... Rest of the file unchanged
-const AdDetailsPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkReady: boolean }) => {
-    // ... AdDetailsPage implementation
-    const { workspaceId, level, objectId } = useParams();
-    const [adData, setAdData] = useState<any>(null);
-    const [creativeData, setCreativeData] = useState<any>(null);
-    const [insights, setInsights] = useState<any>(null);
-    const [loading, setLoading] = useState(true);
-    const [dateMode, setDateMode] = useState<'preset' | 'custom'>('preset');
-    const [timeRange, setTimeRange] = useState<'last_7d' | 'last_30d' | 'this_month' | 'last_month'>('last_30d');
-    const [customDates, setCustomDates] = useState({ start: '', end: '' });
-    const [isCustomDateModalOpen, setIsCustomDateModalOpen] = useState(false);
-    const [tempCustomDates, setTempCustomDates] = useState({ start: '', end: '' });
-    const [selectedObjectives, setSelectedObjectives] = useState<string[]>([]);
-    const [isFilterOpen, setIsFilterOpen] = useState(false);
-    const filterRef = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-        function handleClickOutside(event: MouseEvent) {
-            if (filterRef.current && !filterRef.current.contains(event.target as Node)) {
-                setIsFilterOpen(false);
-            }
-        }
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => document.removeEventListener("mousedown", handleClickOutside);
-    }, []);
-
-    useEffect(() => {
-        const fetchDetails = async () => {
-             if (dateMode === 'custom' && (!customDates.start || !customDates.end)) return;
-             if (!sdkReady) return; 
-             
-            const token = await SecureKV.getWorkspaceToken(workspaceId!);
-            if (!token || !window.FB) {
-                // Demo fallback
-                if (workspaceId === 'wk_demo') {
-                    setAdData({ 
-                        name: '[ADS4][O VESTIDO QUE TRANSFORMA][VIDEO] - 08-12-25',
-                        campaign: { name: 'Campaign 1', objective: 'OUTCOME_SALES' },
-                        preview_shareable_link: 'https://facebook.com' 
-                    });
-                    setCreativeData({
-                        type: 'VIDEO',
-                        videoUrl: 'https://sample-videos.com/video123/mp4/720/big_buck_bunny_720p_1mb.mp4',
-                        imageUrl: 'https://picsum.photos/seed/picsum/500/500'
-                    });
-                    setInsights({
-                        spend: 150.50,
-                        impressions: 4300,
-                        clicks: 120,
-                        ctr: 2.79,
-                        cpm: 35.00,
-                        cpc: 1.25,
-                        purchase_roas: [{ value: 4.5 }],
-                        actions: [{ action_type: 'purchase', value: 5 }]
-                    });
-                    setLoading(false);
-                    return;
-                }
-                if (sdkReady) setLoading(false);
-                return;
-            }
-
-            setLoading(true);
-
-            if (level === 'ad') {
-                window.FB.api(
-                    `/${objectId}`,
-                    'GET',
-                    { 
-                        fields: 'name,preview_shareable_link,campaign{objective,name},creative{thumbnail_url,image_url,video_url,object_story_spec,object_type}',
-                        access_token: token 
-                    },
-                    (response: any) => {
-                        if (response && !response.error) {
-                            setAdData(response);
-                            if (response.campaign?.objective) setSelectedObjectives([response.campaign.objective]);
-                            const creative = response.creative;
-                            if (creative) {
-                                let videoUrl = creative.video_url;
-                                let imageUrl = creative.image_url || creative.thumbnail_url;
-                                if (!videoUrl && creative.object_story_spec?.video_data?.file_url) videoUrl = creative.object_story_spec.video_data.file_url;
-                                if (!imageUrl && creative.object_story_spec?.video_data?.image_url) imageUrl = creative.object_story_spec.video_data.image_url;
-                                setCreativeData({ videoUrl, imageUrl, type: videoUrl ? 'VIDEO' : 'IMAGE' });
-                            }
-                        }
-                    }
-                );
-            } else {
-                setAdData({ name: 'Detalhes indisponíveis para este nível' });
-            }
-
-            const insightsParams: any = {
-                fields: 'spend,impressions,clicks,ctr,cpm,cpc,actions,purchase_roas',
-                access_token: token
-            };
-
-            if (dateMode === 'custom') {
-                insightsParams.time_range = JSON.stringify({ since: customDates.start, until: customDates.end });
-            } else {
-                insightsParams.date_preset = timeRange;
-            }
-
-            window.FB.api(
-                `/${objectId}/insights`,
-                'GET',
-                insightsParams,
-                (response: any) => {
-                    if (response && !response.error && response.data.length > 0) setInsights(response.data[0]);
-                    else setInsights(null);
-                    setLoading(false);
-                }
-            );
-        };
-        fetchDetails();
-    }, [workspaceId, objectId, level, dateMode, timeRange, customDates, sdkReady]);
-
-    const formatCurrency = (val: string) => parseFloat(val || '0').toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-    const formatNumber = (val: string) => parseInt(val || '0').toLocaleString('pt-BR');
-    const toggleObjective = (obj: string) => setSelectedObjectives(prev => prev.includes(obj) ? prev.filter(o => o !== obj) : [...prev, obj]);
-    const toggleAllObjectives = () => setSelectedObjectives(selectedObjectives.length === ALL_OBJECTIVES.length ? [] : ALL_OBJECTIVES);
-    const handleApplyCustomDates = () => { if (tempCustomDates.start && tempCustomDates.end) { setCustomDates(tempCustomDates); setDateMode('custom'); setIsCustomDateModalOpen(false); }};
-    const handlePresetClick = (preset: any) => { setDateMode('preset'); setTimeRange(preset); };
-
-    return (
-        <AppShell workspaces={workspaces} activeWorkspaceId={workspaceId}>
-            <div className="max-w-7xl mx-auto py-8 px-6 print-full-width">
-                {/* Header & Filter */}
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 no-print">
-                    <div>
-                        <div className="flex items-center gap-2 text-text-secondary text-sm mb-1">
-                            <Link to={`/w/${workspaceId}/dashboard`} className="hover:text-white">Dashboard</Link>
-                            <span>/</span>
-                            <span>Detalhes do Anúncio</span>
-                        </div>
-                        <h1 className="text-3xl font-black text-white">{loading ? 'Carregando...' : (adData?.name || 'Anúncio')}</h1>
-                        {adData?.campaign && <span className="text-sm text-text-secondary">Campanha: {adData.campaign.name}</span>}
-                    </div>
-
-                    <div className="flex flex-col sm:flex-row gap-3">
-                         {/* Date Filters */}
-                        <div className="flex bg-card-dark rounded-lg p-1 border border-border-dark">
-                            <button onClick={() => handlePresetClick('last_7d')} className={`px-3 py-1.5 rounded text-xs sm:text-sm font-medium transition-colors ${dateMode === 'preset' && timeRange === 'last_7d' ? 'bg-primary text-white shadow-sm' : 'text-text-secondary hover:text-white'}`}>7d</button>
-                            <button onClick={() => handlePresetClick('last_30d')} className={`px-3 py-1.5 rounded text-xs sm:text-sm font-medium transition-colors ${dateMode === 'preset' && timeRange === 'last_30d' ? 'bg-primary text-white shadow-sm' : 'text-text-secondary hover:text-white'}`}>30d</button>
-                            <button onClick={() => handlePresetClick('this_month')} className={`px-3 py-1.5 rounded text-xs sm:text-sm font-medium transition-colors ${dateMode === 'preset' && timeRange === 'this_month' ? 'bg-primary text-white shadow-sm' : 'text-text-secondary hover:text-white'}`}>Mês Atual</button>
-                            <button onClick={() => setIsCustomDateModalOpen(true)} className={`px-3 py-1.5 rounded text-xs sm:text-sm font-medium transition-colors ${dateMode === 'custom' ? 'bg-primary text-white shadow-sm' : 'text-text-secondary hover:text-white'}`}>Custom</button>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    <div className="lg:col-span-1 space-y-6">
-                        <Card className="overflow-hidden bg-black border-border-dark shadow-2xl">
-                            <div className="p-4 border-b border-white/10 flex justify-between items-center"><h3 className="font-bold text-white text-sm">Criativo do Anúncio</h3><Badge variant={creativeData?.type === 'VIDEO' ? 'info' : 'gray'}>{creativeData?.type === 'VIDEO' ? 'Vídeo' : 'Imagem'}</Badge></div>
-                            <div className="aspect-square bg-black flex items-center justify-center relative">
-                                {loading ? <Skeleton className="w-full h-full" /> : creativeData ? (creativeData.type === 'VIDEO' ? <video src={creativeData.videoUrl} controls className="w-full h-full object-contain" poster={creativeData.imageUrl}/> : <img src={creativeData.imageUrl} alt="Ad Creative" className="w-full h-full object-contain" />) : <div className="text-text-secondary text-sm flex flex-col items-center gap-2"><span className="material-symbols-outlined text-3xl">image_not_supported</span>Preview indisponível</div>}
-                            </div>
-                            {/* Ad Link Button */}
-                             <div className="p-4 border-t border-white/10 bg-white/5">
-                                 {adData?.preview_shareable_link ? (
-                                     <a 
-                                         href={adData.preview_shareable_link} 
-                                         target="_blank" 
-                                         rel="noopener noreferrer" 
-                                         className="flex items-center justify-center gap-2 w-full py-2 bg-primary hover:bg-primary-dark text-white rounded-lg transition-colors font-bold text-sm"
-                                     >
-                                         <span className="material-symbols-outlined text-lg">public</span>
-                                         Ver Anúncio no Facebook
-                                     </a>
-                                 ) : (
-                                     <div className="text-center text-xs text-text-secondary">Link direto indisponível</div>
-                                 )}
-                             </div>
-                        </Card>
-                    </div>
-                    <div className="lg:col-span-2 space-y-6">
-                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            {[{ label: 'Valor Gasto', value: formatCurrency(insights?.spend), color: 'emerald' }, { label: 'Impressões', value: formatNumber(insights?.impressions), color: 'primary' }, { label: 'Cliques', value: formatNumber(insights?.clicks), color: 'blue' }, { label: 'CTR', value: `${parseFloat(insights?.ctr || 0).toFixed(2)}%`, color: 'indigo' }, { label: 'CPM', value: `R$ ${parseFloat(insights?.cpm || 0).toFixed(2)}`, color: 'purple' }, { label: 'CPC', value: `R$ ${parseFloat(insights?.cpc || 0).toFixed(2)}`, color: 'pink' }, { label: 'Purchase ROAS', value: insights?.purchase_roas?.[0]?.value ? parseFloat(insights.purchase_roas[0].value).toFixed(2) : 'N/A', color: 'amber' }, { label: 'Sales', value: insights?.actions?.find((a:any) => a.action_type === 'purchase' || a.action_type === 'offsite_conversion.fb_pixel_purchase')?.value || 'N/A', color: 'rose' }].map((k, i) => (
-                                <Card key={i} className="p-4 hover:border-primary/50 transition-colors">
-                                    <p className="text-xs text-text-secondary uppercase font-bold mb-1">{k.label}</p>
-                                    {loading ? <Skeleton className="h-6 w-20" /> : <p className={`text-xl font-bold text-${k.color === 'emerald' ? 'emerald-400' : 'white'}`}>{k.value}</p>}
-                                </Card>
-                            ))}
-                         </div>
-                         <Card className="p-6 min-h-[300px]">
-                            <h3 className="text-white font-bold mb-4">Análise de Performance</h3>
-                            <div className="w-full h-64 bg-background-dark/50 rounded-lg flex items-center justify-center border border-dashed border-border-dark text-text-secondary"><span className="text-sm">Gráficos detalhados seriam renderizados aqui para o ID: {objectId}</span></div>
-                         </Card>
-                    </div>
-                </div>
-                <Modal isOpen={isCustomDateModalOpen} onClose={() => setIsCustomDateModalOpen(false)} title="Selecionar Período Customizado">
-                    <div className="space-y-4">
-                        <p className="text-text-secondary text-sm">Selecione o intervalo de datas para análise:</p>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="flex flex-col gap-2"><label className="text-xs font-bold text-white uppercase tracking-wider">Data Início</label><input type="date" className="bg-background-dark border border-border-dark rounded-lg p-3 text-white focus:ring-1 focus:ring-primary focus:border-primary outline-none text-sm" value={tempCustomDates.start} onChange={(e) => setTempCustomDates(prev => ({...prev, start: e.target.value}))}/></div>
-                            <div className="flex flex-col gap-2"><label className="text-xs font-bold text-white uppercase tracking-wider">Data Fim</label><input type="date" className="bg-background-dark border border-border-dark rounded-lg p-3 text-white focus:ring-1 focus:ring-primary focus:border-primary outline-none text-sm" value={tempCustomDates.end} onChange={(e) => setTempCustomDates(prev => ({...prev, end: e.target.value}))}/></div>
-                        </div>
-                    </div>
-                    <div className="mt-6 flex justify-end gap-3"><Button variant="ghost" onClick={() => setIsCustomDateModalOpen(false)}>Cancelar</Button><Button onClick={handleApplyCustomDates} disabled={!tempCustomDates.start || !tempCustomDates.end}>Aplicar Filtro</Button></div>
-                </Modal>
-            </div>
-        </AppShell>
-    );
+const WorkspaceSetupWrapper = ({ workspaces, onUpdate, sdkReady }: { workspaces: Workspace[], onUpdate: (w: Workspace) => void, sdkReady: boolean }) => {
+  const { workspaceId } = useParams();
+  const w = workspaces.find(w => w.id === workspaceId);
+  if (!w) return <Navigate to="/workspaces" replace />;
+  return <SetupWizard workspace={w} onUpdateWorkspace={onUpdate} sdkReady={sdkReady} />;
 };
 
-// ... Rest of the file unchanged (WorkspaceSetupRoute, App component)
-const WorkspaceSetupRoute = ({ workspaces, onUpdateWorkspace, sdkReady }: { workspaces: Workspace[], onUpdateWorkspace: (w: Workspace) => void, sdkReady: boolean }) => {
-    const { workspaceId } = useParams();
-    const wk = workspaces.find(w => w.id === workspaceId);
-    if (!wk) return <Navigate to="/workspaces" replace />;
-    return <SetupWizard workspace={wk} onUpdateWorkspace={onUpdateWorkspace} sdkReady={sdkReady} />;
-};
+const App = () => {
+  const [workspaces, setWorkspaces] = useState<Workspace[]>(() => {
+      const stored = localStorage.getItem('sys:workspaces');
+      return stored ? JSON.parse(stored) : [{ id: 'wk_demo', name: 'Demo Workspace', metaConnected: false }];
+  });
+  const [sdkReady, setSdkReady] = useState(false);
 
-const App: React.FC = () => {
-    const [sdkReady, setSdkReady] = useState(false);
-    // Initial workspace state loaded from localStorage or default
-    const [workspaces, setWorkspaces] = useState<Workspace[]>(() => {
-        const saved = localStorage.getItem('sys:workspaces');
-        return saved ? JSON.parse(saved) : [{ id: 'wk_demo', name: 'Alpha Team (Demo)', metaConnected: true }];
-    });
+  useEffect(() => {
+    localStorage.setItem('sys:workspaces', JSON.stringify(workspaces));
+  }, [workspaces]);
 
-    useEffect(() => {
-        localStorage.setItem('sys:workspaces', JSON.stringify(workspaces));
-    }, [workspaces]);
-
-    useEffect(() => {
-        // Force HTTPS for Facebook SDK compatibility (except localhost dev environment)
-        if (window.location.protocol === 'http:' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-            window.location.replace(`https://${window.location.host}${window.location.pathname}${window.location.search}`);
-            return;
-        }
-
-        const initSDK = async () => {
-            const config = await SecureKV.getMetaConfig();
-            const appId = config?.appId; 
-
-            if (!appId) {
-                setSdkReady(false);
-                return;
-            }
-
-            // Function to initialize
-            const launch = () => {
-                window.FB.init({
-                  appId      : appId,
-                  cookie     : true,
-                  xfbml      : true,
-                  version    : 'v19.0'
-                });
-                setSdkReady(true);
-            };
-
-            if (window.FB) {
-                launch();
-            } else {
-                 // Define callback
-                // @ts-ignore
-                window.fbAsyncInit = launch;
-                
-                // Only inject if not already there
-                if (!document.getElementById('facebook-jssdk')) {
-                     (function(d, s, id){
-                        var js, fjs = d.getElementsByTagName(s)[0];
-                        if (d.getElementById(id)) { return; }
-                        js = d.createElement(s) as HTMLScriptElement;
-                        js.id = id;
-                        js.src = "https://connect.facebook.net/en_US/sdk.js";
-                        if (fjs && fjs.parentNode) fjs.parentNode.insertBefore(js, fjs);
-                    }(document, 'script', 'facebook-jssdk'));
-                }
-            }
-        };
-
-        initSDK();
-
-        const handleConfigChange = () => {
-            initSDK();
-        };
-
-        window.addEventListener('sys_config_change', handleConfigChange);
-        return () => window.removeEventListener('sys_config_change', handleConfigChange);
-    }, []);
-
-    const createWorkspace = (name: string) => {
-        const newWk: Workspace = {
-            id: `wk_${Math.floor(Math.random() * 10000)}`,
-            name,
-            metaConnected: false
-        };
-        setWorkspaces([...workspaces, newWk]);
+  useEffect(() => {
+    const initSDK = async () => {
+       const config = await SecureKV.getMetaConfig();
+       if (config && config.appId) {
+          window.fbAsyncInit = function() {
+            window.FB.init({
+              appId      : config.appId,
+              cookie     : true,
+              xfbml      : true,
+              version    : 'v19.0'
+            });
+            setSdkReady(true);
+          };
+          (function(d, s, id){
+             var js, fjs = d.getElementsByTagName(s)[0];
+             if (d.getElementById(id)) {return;}
+             js = d.createElement(s) as HTMLScriptElement; js.id = id;
+             js.src = "https://connect.facebook.net/en_US/sdk.js";
+             if (fjs && fjs.parentNode) {
+                 fjs.parentNode.insertBefore(js, fjs);
+             } else {
+                 d.head.appendChild(js);
+             }
+           }(document, 'script', 'facebook-jssdk'));
+       }
     };
+    initSDK();
+    
+    const reloadHandler = () => window.location.reload();
+    window.addEventListener('sys_config_change', reloadHandler);
+    return () => window.removeEventListener('sys_config_change', reloadHandler);
+  }, []);
 
-    const updateWorkspace = (updated: Workspace) => {
-        setWorkspaces(prev => prev.map(w => w.id === updated.id ? updated : w));
-    };
+  const handleCreateWorkspace = (name: string) => {
+    const newW: Workspace = { id: `wk_${Date.now()}`, name, metaConnected: false };
+    setWorkspaces([...workspaces, newW]);
+  };
 
-    return (
-        <Routes>
-            <Route path="/workspaces" element={<WorkspacesPage workspaces={workspaces} onCreateWorkspace={createWorkspace} />} />
-            <Route path="/integrations" element={<IntegrationsPage />} />
-            <Route path="/w/:workspaceId/setup" element={<WorkspaceSetupRoute workspaces={workspaces} onUpdateWorkspace={updateWorkspace} sdkReady={sdkReady} />} />
-            <Route path="/w/:workspaceId/dashboard" element={<DashboardPage workspaces={workspaces} sdkReady={sdkReady} />} />
-            <Route path="/w/:workspaceId/ads/:level/:objectId" element={<AdDetailsPage workspaces={workspaces} sdkReady={sdkReady} />} />
-            <Route path="/" element={<Navigate to="/workspaces" replace />} />
-            <Route path="*" element={<Navigate to="/workspaces" replace />} />
-        </Routes>
-    );
+  const handleUpdateWorkspace = (updated: Workspace) => {
+    setWorkspaces(workspaces.map(w => w.id === updated.id ? updated : w));
+  };
+
+  return (
+    <Routes>
+      <Route path="/" element={<Navigate to="/workspaces" replace />} />
+      <Route path="/workspaces" element={<WorkspacesPage workspaces={workspaces} onCreateWorkspace={handleCreateWorkspace} />} />
+      <Route path="/integrations" element={<IntegrationsPage />} />
+      <Route path="/w/:workspaceId/dashboard" element={<DashboardPage workspaces={workspaces} sdkReady={sdkReady} />} />
+      <Route path="/w/:workspaceId/setup" element={
+        <WorkspaceSetupWrapper workspaces={workspaces} onUpdate={handleUpdateWorkspace} sdkReady={sdkReady} />
+      } />
+    </Routes>
+  );
 };
 
 export default App;
