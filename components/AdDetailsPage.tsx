@@ -71,15 +71,16 @@ export const AdDetailsPage = ({ workspaces, sdkReady, isLoading }: { workspaces:
             }
 
             try {
-                // 1. Fetch Ad Metadata (Expanded fields for robustness)
+                // 1. Fetch Ad Metadata (Expanded fields per user request)
+                // Includes: name, insights (summary), adlabels, creative fields directly
                 const adPromise = new Promise<any>((resolve) => {
                     window.FB.api(`/${adId}`, {
-                        fields: 'name,status,objective,preview_shareable_link,effective_object_story_id,creative{id,instagram_permalink_url,thumbnail_url,image_url}',
+                        fields: 'name,status,objective,preview_shareable_link,effective_object_story_id,creative{id,thumbnail_url,image_url,title,body,call_to_action_type,instagram_permalink_url}',
                         ...apiParams
                     }, resolve);
                 });
 
-                // 2. Fetch Insights
+                // 2. Fetch Detailed Insights (for the specific time range selected in UI)
                 const insightsPromise = new Promise<any>((resolve) => {
                     window.FB.api(`/${adId}/insights`, {
                         fields: 'spend,impressions,clicks,ctr,cpc,cpm,actions,action_values,purchase_roas,cost_per_action_type,date_start,date_stop',
@@ -107,7 +108,7 @@ export const AdDetailsPage = ({ workspaces, sdkReady, isLoading }: { workspaces:
                 if (adRes && !adRes.error) {
                     setAdMeta(adRes);
                     if (adRes.creative?.id) {
-                        // Fetch Creative Details
+                        // Fetch Full Creative Details (Fallback for complex objects)
                         window.FB.api(`/${adRes.creative.id}`, {
                             fields: 'name,title,body,image_url,thumbnail_url,object_story_spec,asset_feed_spec,call_to_action_type,video_id',
                             ...apiParams
@@ -167,7 +168,18 @@ export const AdDetailsPage = ({ workspaces, sdkReady, isLoading }: { workspaces:
         let type = 'IMAGE';
         let cta = 'SAIBA MAIS';
 
-        // 1. Try to use detailed creative object
+        // Priority 1: Direct Ad Meta (from specific fields requested: creative{thumbnail_url, title, body})
+        if (adMeta?.creative) {
+            if (adMeta.creative.thumbnail_url) image = adMeta.creative.thumbnail_url;
+            else if (adMeta.creative.image_url) image = adMeta.creative.image_url;
+            
+            if (adMeta.creative.title) title = adMeta.creative.title;
+            if (adMeta.creative.body) body = adMeta.creative.body;
+            
+            if (adMeta.creative.call_to_action_type) cta = adMeta.creative.call_to_action_type.replace(/_/g, ' ');
+        }
+
+        // Priority 2: Detailed Creative Object (if fetched and fields were missing in Ad Meta)
         if (creative) {
             const spec = creative.object_story_spec;
             const assetFeed = creative.asset_feed_spec;
@@ -180,53 +192,51 @@ export const AdDetailsPage = ({ workspaces, sdkReady, isLoading }: { workspaces:
                 type = 'CAROUSEL';
             }
 
-            // Extract Text
-            title = extract(spec, 'link_data.name') || extract(spec, 'video_data.title');
-            body = extract(spec, 'link_data.message') || extract(spec, 'video_data.message');
-            
-            if (assetFeed) {
-                 const firstTitle = extract(assetFeed, 'titles.0.text');
-                 const firstBody = extract(assetFeed, 'bodies.0.text');
-                 if (!title) title = firstTitle;
-                 if (!body) body = firstBody;
+            // Fill gaps if missing
+            if (!title) {
+                title = extract(spec, 'link_data.name') || extract(spec, 'video_data.title');
+                if (assetFeed && !title) title = extract(assetFeed, 'titles.0.text');
+                if (!title) title = creative.title || '';
             }
 
-            if (!title) title = creative.title || '';
-            if (!body) body = creative.body || '';
-
-            // Extract Image
-            if (type === 'VIDEO') {
-                image = extract(spec, 'video_data.image_url') || 
-                        extract(spec, 'video_data.picture') || 
-                        extract(assetFeed, 'videos.0.thumbnail_url');
-            } else if (type === 'CAROUSEL') {
-                image = extract(spec, 'link_data.child_attachments.0.picture');
-            } else {
-                image = extract(spec, 'link_data.picture') || 
-                        extract(spec, 'photo_data.picture') ||
-                        extract(assetFeed, 'images.0.url');
+            if (!body) {
+                body = extract(spec, 'link_data.message') || extract(spec, 'video_data.message');
+                if (assetFeed && !body) body = extract(assetFeed, 'bodies.0.text');
+                if (!body) body = creative.body || '';
             }
 
-            // High priority fallbacks from creative object
-            if (!image) image = creative.image_url || creative.thumbnail_url || '';
+            if (!image) {
+                // Extract Image from Spec
+                if (type === 'VIDEO') {
+                    image = extract(spec, 'video_data.image_url') || 
+                            extract(spec, 'video_data.picture') || 
+                            extract(assetFeed, 'videos.0.thumbnail_url');
+                } else if (type === 'CAROUSEL') {
+                    image = extract(spec, 'link_data.child_attachments.0.picture');
+                } else {
+                    image = extract(spec, 'link_data.picture') || 
+                            extract(spec, 'photo_data.picture') ||
+                            extract(assetFeed, 'images.0.url');
+                }
+                // Fallback to top-level creative fields
+                if (!image) image = creative.thumbnail_url || creative.image_url;
+            }
+
+            // CTA Logic
+            if (cta === 'SAIBA MAIS' && creative.call_to_action_type) {
+                cta = creative.call_to_action_type.replace(/_/g, ' ');
+            } else if (cta === 'SAIBA MAIS') {
+                cta = extract(spec, 'link_data.call_to_action.type') || 'SAIBA MAIS';
+            }
 
             // Domain
             const link = extract(spec, 'link_data.link') || extract(assetFeed, 'link_urls.0.website_url') || extract(spec, 'video_data.call_to_action.value.link');
             if (link) {
                 try { domain = new URL(link).hostname.replace('www.', '').toUpperCase(); } catch {}
             }
-
-            // CTA
-            cta = creative.call_to_action_type 
-                ? creative.call_to_action_type.replace(/_/g, ' ') 
-                : extract(spec, 'link_data.call_to_action.type') || 'SAIBA MAIS';
         }
 
-        // 2. Final Fallbacks using Ad Meta (if creative details failed or incomplete)
-        if (!image && adMeta?.creative) {
-            image = adMeta.creative.thumbnail_url || adMeta.creative.image_url || '';
-        }
-        
+        // Final Fallbacks
         if (!title && adMeta) title = adMeta.name;
 
         return { title, body, image, domain, type, cta };
@@ -387,6 +397,7 @@ export const AdDetailsPage = ({ workspaces, sdkReady, isLoading }: { workspaces:
                                     {adMeta.status}
                                 </span>
                             )}
+                            {/* GOAL / OBJECTIVE EXTRACTION */}
                             {adMeta?.objective && (
                                 <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20 uppercase tracking-wider">
                                     {adMeta.objective.replace('OUTCOME_', '').replace(/_/g, ' ')}
