@@ -17,6 +17,8 @@ import { DashboardTemplateSelector } from './components/DashboardTemplates';
 import { DashboardShareModal } from './components/DashboardShareModal';
 import { SharedWorkspaceDashboard } from './components/SharedWorkspaceDashboard';
 import type { Workspace, InsightData, DateRangePreset, APIGeneralInsights, DashboardTemplate, KpiConfig } from './types';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 
 declare global {
   interface Window {
@@ -76,6 +78,7 @@ const DashboardPage = ({ workspaces, onUpdateWorkspace, sdkReady }: { workspaces
 
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isExporting, setIsExporting] = useState(false); // State for PDF export
   const [stats, setStats] = useState<any>(null);
   const [campaigns, setCampaigns] = useState<InsightData[]>([]);
   const [trendData, setTrendData] = useState<{date: string, value: number}[]>([]);
@@ -417,6 +420,45 @@ const DashboardPage = ({ workspaces, onUpdateWorkspace, sdkReady }: { workspaces
     fetchData();
   };
 
+  const handleExportPDF = async () => {
+        const element = document.getElementById('dashboard-content');
+        if(!element) return;
+        setIsExporting(true);
+        try {
+            // Using html2canvas to capture the element
+            const canvas = await html2canvas(element, {
+                scale: 2, // Improve resolution
+                backgroundColor: '#131022', // Match dark mode background
+                useCORS: true, // Allow loading cross-origin images (avatars, etc.)
+                logging: false,
+                ignoreElements: (el) => el.classList.contains('no-print') // Ignore elements with no-print class
+            });
+
+            const imgData = canvas.toDataURL('image/png');
+            
+            // Calculate dimensions to fit in PDF (Landscape)
+            // We create a PDF size that matches the canvas ratio to avoid cutting content
+            // or we use standard A4 landscape but fit content.
+            // For dashboards, a custom page size often looks best for digital distribution.
+            const pdfWidth = canvas.width;
+            const pdfHeight = canvas.height;
+
+            const pdf = new jsPDF({
+                orientation: 'landscape',
+                unit: 'px',
+                format: [pdfWidth, pdfHeight]
+            });
+
+            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+            pdf.save(`Andromeda-Dashboard-${workspaceId}-${new Date().toISOString().split('T')[0]}.pdf`);
+        } catch (err) {
+            console.error("Failed to export PDF", err);
+            alert("Erro ao gerar PDF. Tente novamente.");
+        } finally {
+            setIsExporting(false);
+        }
+  };
+
   // Helper: Get value for dynamic KPI
   const getKpiValue = (key: string): { value: string, subValue?: string, trend: 'up' | 'down' | 'neutral' } => {
       const getAction = (type: string) => {
@@ -588,7 +630,8 @@ const DashboardPage = ({ workspaces, onUpdateWorkspace, sdkReady }: { workspaces
 
   return (
     <AppShell workspaces={workspaces} activeWorkspaceId={workspaceId}>
-        <div className="max-w-[1400px] mx-auto py-8 px-6 space-y-8 print-full-width">
+        {/* We wrap the content in a div with an ID for html2canvas to target */}
+        <div id="dashboard-content" className="max-w-[1400px] mx-auto py-8 px-6 space-y-8 bg-background-light dark:bg-background-dark min-h-screen">
             
             {/* Header & Controls */}
             <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 no-print">
@@ -736,9 +779,15 @@ const DashboardPage = ({ workspaces, onUpdateWorkspace, sdkReady }: { workspaces
                         <Button 
                             variant="secondary" 
                             className="h-[38px] text-xs shrink-0 bg-card-dark border-border-dark hover:bg-white/5" 
-                            onClick={() => window.print()}
+                            onClick={handleExportPDF}
+                            disabled={isExporting}
                         >
-                            <span className="material-symbols-outlined text-sm">print</span> Exportar
+                            {isExporting ? (
+                                <span className="material-symbols-outlined text-sm animate-spin">sync</span>
+                            ) : (
+                                <span className="material-symbols-outlined text-sm">picture_as_pdf</span>
+                            )}
+                            Exportar PDF
                         </Button>
                         <button 
                             onClick={handleRefresh}
@@ -819,7 +868,6 @@ const DashboardPage = ({ workspaces, onUpdateWorkspace, sdkReady }: { workspaces
                 </div>
             </Modal>
 
-            {/* Template Selector Modal - REMOVED from here, now a separate page */}
             {/* Share Modal */}
             <DashboardShareModal 
                 isOpen={isShareModalOpen}

@@ -5,6 +5,8 @@ import { AppShell } from './Navigation';
 import { Button, Card, Badge, Modal } from './UI';
 import { SecureKV } from '../utils/kv';
 import type { Workspace, CustomReport } from '../types';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 
 // --- Helper: Mock Data Generator based on Config ---
 export const generateReportData = (config: CustomReport['config'], type: CustomReport['type']) => {
@@ -48,6 +50,39 @@ interface ReportViewerProps {
 export const ReportViewer: React.FC<ReportViewerProps> = ({ report, onClose, onEdit, onShare, isPublicView = false }) => {
     const data = useMemo(() => generateReportData(report.config, report.type), [report]);
     const primaryMetric = report.config.metrics[0];
+    const [isExporting, setIsExporting] = useState(false);
+
+    const handleDownloadPDF = async () => {
+        const element = document.getElementById('report-content');
+        if(!element) return;
+        setIsExporting(true);
+        try {
+            const canvas = await html2canvas(element, {
+                scale: 2,
+                backgroundColor: '#131022',
+                useCORS: true,
+                ignoreElements: (el) => el.classList.contains('no-print')
+            });
+
+            const imgData = canvas.toDataURL('image/png');
+            const pdfWidth = canvas.width;
+            const pdfHeight = canvas.height;
+
+            const pdf = new jsPDF({
+                orientation: 'landscape',
+                unit: 'px',
+                format: [pdfWidth, pdfHeight]
+            });
+
+            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+            pdf.save(`Relatorio-${report.name.replace(/\s+/g, '-')}-${new Date().toISOString().split('T')[0]}.pdf`);
+        } catch (err) {
+            console.error("Failed to export PDF", err);
+            alert("Erro ao gerar PDF.");
+        } finally {
+            setIsExporting(false);
+        }
+    };
 
     // Calculate Totals for Header
     const totalPrimary = data.reduce((acc, curr) => acc + (curr[primaryMetric] || 0), 0);
@@ -60,7 +95,7 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({ report, onClose, onE
     return (
         <div className={`flex flex-col h-full bg-background-light dark:bg-background-dark overflow-y-auto ${isPublicView ? '' : 'animate-in fade-in'}`}>
             {/* Viewer Header */}
-            <div className="bg-white dark:bg-card-dark border-b border-gray-200 dark:border-border-dark px-6 py-4 sticky top-0 z-10">
+            <div className="bg-white dark:bg-card-dark border-b border-gray-200 dark:border-border-dark px-6 py-4 sticky top-0 z-10 no-print">
                 <div className="max-w-[1400px] mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                     <div className="flex items-center gap-4">
                         {!isPublicView && (
@@ -102,15 +137,20 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({ report, onClose, onE
                             </>
                         )}
                         
-                        <Button onClick={() => window.print()} className={isPublicView ? 'bg-primary' : ''}>
-                            <span className="material-symbols-outlined text-sm">download</span> {isPublicView ? 'Baixar PDF' : 'Exportar'}
+                        <Button onClick={handleDownloadPDF} className={isPublicView ? 'bg-primary' : ''} disabled={isExporting}>
+                            {isExporting ? (
+                                <span className="material-symbols-outlined text-sm animate-spin">sync</span>
+                            ) : (
+                                <span className="material-symbols-outlined text-sm">picture_as_pdf</span>
+                            )} 
+                            {isPublicView ? 'Baixar PDF' : 'Exportar PDF'}
                         </Button>
                     </div>
                 </div>
             </div>
 
             {/* Viewer Content */}
-            <div className="flex-1 p-6 max-w-[1400px] mx-auto w-full">
+            <div id="report-content" className="flex-1 p-6 max-w-[1400px] mx-auto w-full bg-background-light dark:bg-background-dark">
                 {/* Summary Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                     {report.config.metrics.slice(0, 3).map((metric, idx) => {
