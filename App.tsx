@@ -8,6 +8,7 @@ import { SecureKV } from './utils/kv';
 import { IntegrationsPage, WorkspacesPage, SetupWizard } from './components/SaaSPages';
 import { AdDetailsPage } from './components/AdDetailsPage';
 import { ActivityLogsPage } from './components/ActivityLogsPage';
+import { CustomReportsPage } from './components/CustomReportsPage';
 import type { Workspace, InsightData, DateRangePreset, APIGeneralInsights } from './types';
 
 declare global {
@@ -731,6 +732,7 @@ const App = () => {
       <Route path="/integrations" element={<IntegrationsPage />} />
       <Route path="/w/:workspaceId/ads/ad/:adId" element={<AdDetailsPage workspaces={workspaces} />} />
       <Route path="/w/:workspaceId/logs" element={<ActivityLogsPage workspaces={workspaces} />} />
+      <Route path="/w/:workspaceId/reports" element={<CustomReportsPage workspaces={workspaces} />} />
       <Route path="/w/:workspaceId/dashboard" element={<DashboardPage workspaces={workspaces} sdkReady={sdkReady} />} />
       <Route path="/w/:workspaceId/ads/*" element={<DashboardPage workspaces={workspaces} sdkReady={sdkReady} />} />
       <Route path="/w/:workspaceId/setup" element={

@@ -82,15 +82,34 @@ export const AppShell: React.FC<AppShellProps> = ({ children, workspaces = [], a
             Integrações
           </Link>
           
-          {/* New Logs Link - Visible only when inside a workspace */}
+          {/* Workspace Specific Links */}
           {activeWorkspaceId && (
-            <Link 
-                to={`/w/${activeWorkspaceId}/logs`} 
-                className={`text-sm font-medium transition-colors px-3 py-2 rounded-lg flex items-center gap-2 ${isActive(`/w/${activeWorkspaceId}/logs`) ? 'text-white bg-white/5' : 'text-text-secondary hover:text-white hover:bg-white/5'}`}
-            >
-                <span className="material-symbols-outlined text-[16px]">history</span>
-                Logs
-            </Link>
+            <>
+                <div className="w-px h-4 bg-border-dark mx-1 opacity-50"></div>
+                
+                <Link 
+                    to={`/w/${activeWorkspaceId}/dashboard`}
+                    className={`text-sm font-medium transition-colors px-3 py-2 rounded-lg ${isActive(`/w/${activeWorkspaceId}/dashboard`) ? 'text-white bg-white/5' : 'text-text-secondary hover:text-white hover:bg-white/5'}`}
+                >
+                    Dashboard
+                </Link>
+
+                <Link 
+                    to={`/w/${activeWorkspaceId}/reports`}
+                    className={`text-sm font-medium transition-colors px-3 py-2 rounded-lg flex items-center gap-2 ${isActive(`/w/${activeWorkspaceId}/reports`) ? 'text-white bg-white/5' : 'text-text-secondary hover:text-white hover:bg-white/5'}`}
+                >
+                    <span className="material-symbols-outlined text-[16px]">bar_chart</span>
+                    Relatórios
+                </Link>
+
+                <Link 
+                    to={`/w/${activeWorkspaceId}/logs`} 
+                    className={`text-sm font-medium transition-colors px-3 py-2 rounded-lg flex items-center gap-2 ${isActive(`/w/${activeWorkspaceId}/logs`) ? 'text-white bg-white/5' : 'text-text-secondary hover:text-white hover:bg-white/5'}`}
+                >
+                    <span className="material-symbols-outlined text-[16px]">history</span>
+                    Logs
+                </Link>
+            </>
           )}
 
           <div className="w-px h-4 bg-border-dark mx-2"></div>

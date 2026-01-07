@@ -120,3 +120,16 @@ export interface ActivityLog {
   details: string;
   status: 'SUCCESS' | 'FAILURE' | 'WARNING';
 }
+
+export interface CustomReport {
+  id: string;
+  name: string;
+  author: string;
+  lastEdited: string;
+  type: 'line' | 'bar' | 'pie' | 'table';
+  config: {
+    metrics: string[];
+    dimension: string;
+    filters: string[];
+  };
+}
