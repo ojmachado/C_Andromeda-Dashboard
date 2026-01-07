@@ -966,7 +966,7 @@ const App = () => {
             
             <Route path="/w/:workspaceId/ads/:level/:adId" element={
                 <ProtectedRoute isAuthenticated={isAuthenticated}>
-                    <AdDetailsPage workspaces={workspaces} />
+                    <AdDetailsPage workspaces={workspaces} sdkReady={sdkReady} />
                 </ProtectedRoute>
             } />
             

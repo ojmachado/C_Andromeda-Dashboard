@@ -2,11 +2,11 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { AppShell } from './Navigation';
-import { Card, Button, Badge, Skeleton } from './UI';
+import { Card, Button, Badge, Skeleton, Modal } from './UI';
 import { SecureKV } from '../utils/kv';
 import type { Workspace, AdCreativeData, APIGeneralInsights, DateRangePreset } from '../types';
 
-export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
+export const AdDetailsPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkReady: boolean }) => {
     const { workspaceId, adId } = useParams();
     const navigate = useNavigate();
     const [isLoading, setIsLoading] = useState(true);
@@ -16,6 +16,11 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
     const [dateRange, setDateRange] = useState<DateRangePreset>('last_30d');
     const [isDateDropdownOpen, setIsDateDropdownOpen] = useState(false);
     const dateDropdownRef = useRef<HTMLDivElement>(null);
+    
+    // Custom Date State
+    const [isCustomDateOpen, setIsCustomDateOpen] = useState(false);
+    const [customDates, setCustomDates] = useState({ start: '', end: '' });
+    const [tempCustomDates, setTempCustomDates] = useState({ start: '', end: '' });
 
     // Data States
     const [adMeta, setAdMeta] = useState<any>(null);
@@ -37,20 +42,35 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
     useEffect(() => {
         const loadData = async () => {
             if (!adId || !workspaceId) return;
+            
+            // Wait for SDK
+            if (!sdkReady || !window.FB) {
+                // Don't set error yet, keep loading state until timeout or ready
+                return;
+            }
 
             setIsLoading(true);
             const token = await SecureKV.getWorkspaceToken(workspaceId);
 
-            if (!token || !window.FB) {
-                setError("SDK not ready or Token missing");
+            if (!token) {
+                setError("Token de acesso não encontrado. Reconecte o workspace.");
                 setIsLoading(false);
                 return;
             }
 
             const apiParams = { access_token: token };
-            const timeParams: any = { date_preset: dateRange };
-            if (dateRange === 'maximum') delete timeParams.date_preset; // Fallback to default if max
-            if (dateRange === 'custom') { /* Handle custom date logic if needed */ }
+            let timeParams: any = {};
+            
+            if (dateRange === 'custom') {
+                if (customDates.start && customDates.end) {
+                    timeParams.time_range = JSON.stringify({ since: customDates.start, until: customDates.end });
+                } else {
+                    // Fallback if custom dates not set yet
+                    timeParams.date_preset = 'last_30d'; 
+                }
+            } else if (dateRange !== 'maximum') {
+                timeParams.date_preset = dateRange;
+            }
 
             try {
                 // 1. Fetch Ad Metadata & Creative ID & Link Fields
@@ -62,7 +82,6 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                 });
 
                 // 2. Fetch Insights (Overall)
-                // Added cost_per_action_type for precise CPA data
                 const insightsPromise = new Promise<any>((resolve) => {
                     window.FB.api(`/${adId}/insights`, {
                         fields: 'spend,impressions,clicks,ctr,cpc,cpm,actions,action_values,purchase_roas,cost_per_action_type,date_start,date_stop',
@@ -140,7 +159,7 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
         };
 
         loadData();
-    }, [workspaceId, adId, dateRange]);
+    }, [workspaceId, adId, dateRange, customDates, sdkReady]);
 
     // --- Data Parsing Helpers ---
 
@@ -295,7 +314,16 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
         'this_month': 'Este Mês',
         'last_month': 'Mês Passado',
         'lifetime': 'Vitalício',
-        'maximum': 'Máximo'
+        'maximum': 'Máximo',
+        'custom': 'Personalizado'
+    };
+
+    const handleCustomDateApply = () => {
+        if (tempCustomDates.start && tempCustomDates.end) {
+            setCustomDates(tempCustomDates);
+            setDateRange('custom');
+            setIsCustomDateOpen(false);
+        }
     };
 
     if (isLoading && !creative) { // Only show skeleton on initial load if no data
@@ -335,7 +363,7 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                                 className="flex items-center gap-2 bg-white dark:bg-[#292348] hover:bg-gray-100 dark:hover:bg-[#342c5a] text-slate-700 dark:text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors border border-gray-200 dark:border-transparent w-full md:w-auto justify-center shadow-sm"
                             >
                                 <span className="material-symbols-outlined text-[18px]">calendar_today</span>
-                                <span>{dateLabels[dateRange] || dateRange}</span>
+                                <span>{dateRange === 'custom' && customDates.start ? `${new Date(customDates.start).toLocaleDateString('pt-BR')} - ${new Date(customDates.end).toLocaleDateString('pt-BR')}` : dateLabels[dateRange]}</span>
                                 <span className="material-symbols-outlined text-[18px]">expand_more</span>
                             </button>
                             
@@ -344,7 +372,14 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                                     {Object.entries(dateLabels).map(([key, label]) => (
                                         <button 
                                             key={key}
-                                            onClick={() => { setDateRange(key as DateRangePreset); setIsDateDropdownOpen(false); }}
+                                            onClick={() => { 
+                                                if(key === 'custom') {
+                                                    setIsCustomDateOpen(true);
+                                                } else {
+                                                    setDateRange(key as DateRangePreset); 
+                                                }
+                                                setIsDateDropdownOpen(false); 
+                                            }}
                                             className={`w-full text-left px-4 py-2.5 text-sm hover:bg-white/5 transition-colors ${dateRange === key ? 'text-primary font-bold bg-white/5' : 'text-text-secondary'}`}
                                         >
                                             {label}
@@ -516,7 +551,8 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                                     <KpiDetailCard label="Impressões" value={impressions.toLocaleString()} icon="visibility" trend="neutral" />
                                     <KpiDetailCard label="Cliques" value={clicks.toLocaleString()} icon="ads_click" trend="neutral" />
                                     <KpiDetailCard label="CTR" value={`${ctr.toFixed(2)}%`} icon="percent" trend="neutral" />
-                                    {/* New KPIs */}
+                                    
+                                    {/* Requested Messaging KPIs */}
                                     <KpiDetailCard 
                                         label="Msgs Iniciadas" 
                                         value={messages.toLocaleString()} 
@@ -567,22 +603,7 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                                         </div>
                                     </div>
 
-                                    {/* Messages Card - Replaced by individual cards above but kept here for complete metrics context if needed, or we can simplify this section now. Leaving as is to not remove functionality unless requested, just enhancing top section. */}
-                                    {/* Actually, user didn't ask to remove this, but showing duplicate data might be confusing. I'll keep it as a summary card for now. */}
-                                    <div className="bg-white dark:bg-[#1e1b2e] p-4 rounded-xl border border-gray-200 dark:border-[#292348] shadow-sm relative overflow-hidden group">
-                                        <div className="absolute inset-0 bg-sky-500/5 dark:bg-sky-500/10 group-hover:bg-sky-500/20 transition-colors"></div>
-                                        <div className="relative z-10">
-                                            <div className="flex items-start justify-between mb-2">
-                                                <p className="text-xs font-medium text-sky-600 dark:text-sky-400">Msgs Iniciadas</p>
-                                                <span className="material-symbols-outlined text-sky-500/60 text-[18px]">chat</span>
-                                            </div>
-                                            <p className="text-xl font-bold text-slate-900 dark:text-white">{messages}</p>
-                                            <p className="text-[10px] mt-2 text-slate-500 dark:text-text-secondary font-mono">
-                                                Custo: {costPerMessage > 0 ? costPerMessage.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-'}
-                                            </p>
-                                        </div>
-                                    </div>
-
+                                    {/* CPC/ROAS Row */}
                                     <KpiDetailCard label="CPC" value={parseFloat(insights?.cpc || '0').toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} icon="show_chart" />
                                     <KpiDetailCard label="ROAS" value={`${roas.toFixed(2)}x`} icon="monetization_on" trend={roas > 2 ? 'up' : 'down'} trendColor={roas > 2 ? 'text-emerald-500' : 'text-red-500'} />
                                 </div>
@@ -629,7 +650,6 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                                                 strokeWidth="3" 
                                                 vectorEffect="non-scaling-stroke"
                                             />
-                                            {/* Data Points on Hover (optional, kept simple for now) */}
                                         </svg>
                                     ) : (
                                         <div className="absolute inset-0 flex items-center justify-center text-text-secondary text-sm border border-dashed border-slate-700 rounded-lg">
@@ -723,6 +743,36 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                     </div>
                 </div>
             </div>
+
+            {/* Custom Date Modal */}
+            <Modal isOpen={isCustomDateOpen} onClose={() => setIsCustomDateOpen(false)} title="Periodo Personalizado">
+                <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                            <label className="text-xs font-bold text-text-secondary uppercase">Início</label>
+                            <input 
+                                type="date" 
+                                className="w-full bg-background-dark border border-border-dark rounded-lg p-3 text-white focus:border-primary outline-none"
+                                value={tempCustomDates.start}
+                                onChange={(e) => setTempCustomDates(p => ({...p, start: e.target.value}))}
+                            />
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-xs font-bold text-text-secondary uppercase">Fim</label>
+                            <input 
+                                type="date" 
+                                className="w-full bg-background-dark border border-border-dark rounded-lg p-3 text-white focus:border-primary outline-none"
+                                value={tempCustomDates.end}
+                                onChange={(e) => setTempCustomDates(p => ({...p, end: e.target.value}))}
+                            />
+                        </div>
+                    </div>
+                </div>
+                <div className="flex justify-end gap-2 mt-6">
+                    <Button variant="ghost" onClick={() => setIsCustomDateOpen(false)}>Cancelar</Button>
+                    <Button onClick={handleCustomDateApply} disabled={!tempCustomDates.start || !tempCustomDates.end}>Aplicar</Button>
+                </div>
+            </Modal>
         </AppShell>
     );
 };

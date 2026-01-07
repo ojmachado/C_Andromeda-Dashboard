@@ -9,6 +9,100 @@ interface TemplateSelectorProps {
     onClose?: () => void; // Made optional for full page view
 }
 
+const ChartPreview = ({ type, colorClass }: { type: string, colorClass: string }) => {
+    // Map Tailwind bg classes to Hex colors for SVG manipulation
+    const colorMap: Record<string, string> = {
+        'bg-emerald-500': '#10b981',
+        'bg-blue-500': '#3b82f6',
+        'bg-sky-500': '#0ea5e9',
+        'bg-purple-500': '#a855f7',
+        'bg-primary': '#3713ec', 
+        'bg-amber-500': '#f59e0b'
+    };
+    
+    const stroke = colorMap[colorClass] || '#3713ec';
+
+    if (type === 'ecom') {
+        // Bar Chart Simulation
+        return (
+            <div className="w-full h-full flex items-end justify-between px-4 gap-1.5 pb-0 opacity-90">
+                {[35, 55, 40, 70, 50, 85, 60, 95].map((h, i) => (
+                    <div 
+                        key={i} 
+                        className="flex-1 rounded-t-sm transition-all duration-500 ease-out" 
+                        style={{ height: `${h}%`, backgroundColor: stroke, opacity: 0.2 + (i * 0.1) }}
+                    ></div>
+                ))}
+            </div>
+        );
+    }
+    
+    if (type === 'messaging') {
+        // Conversation/Timeline View
+        return (
+             <div className="w-full h-full flex flex-col justify-center gap-2 px-6 opacity-80">
+                <div className="h-2.5 w-[60%] rounded-full opacity-40" style={{ backgroundColor: stroke }}></div>
+                <div className="h-2.5 w-[40%] rounded-full opacity-20" style={{ backgroundColor: stroke }}></div>
+                <div className="h-2.5 w-[80%] rounded-full self-end opacity-60" style={{ backgroundColor: stroke }}></div>
+                <div className="h-2.5 w-[50%] rounded-full self-end opacity-30" style={{ backgroundColor: stroke }}></div>
+                <div className="h-2.5 w-[70%] rounded-full opacity-50" style={{ backgroundColor: stroke }}></div>
+             </div>
+        );
+    }
+
+    if (type === 'awareness') {
+        // Area Chart (Waves)
+        return (
+            <div className="w-full h-full relative overflow-hidden flex items-end pb-2">
+                <svg viewBox="0 0 100 40" className="w-full h-[80%] drop-shadow-sm" preserveAspectRatio="none">
+                    <defs>
+                        <linearGradient id={`grad-${type}`} x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor={stroke} stopOpacity="0.4" />
+                            <stop offset="100%" stopColor={stroke} stopOpacity="0" />
+                        </linearGradient>
+                    </defs>
+                    <path d="M0,40 L0,20 Q25,5 50,20 T100,10 V40 Z" fill={`url(#grad-${type})`} />
+                    <path d="M0,20 Q25,5 50,20 T100,10" fill="none" stroke={stroke} strokeWidth="2" strokeLinecap="round" />
+                </svg>
+            </div>
+        );
+    }
+
+    if (type === 'leads') {
+        // Funnel / Bar mix
+        return (
+            <div className="w-full h-full flex flex-col items-center justify-end pb-3 gap-1">
+                {[100, 80, 60, 40].map((w, i) => (
+                    <div 
+                        key={i}
+                        className="h-3 rounded-full opacity-80"
+                        style={{ width: `${w}%`, backgroundColor: stroke, opacity: 1 - (i * 0.2) }}
+                    ></div>
+                ))}
+            </div>
+        );
+    }
+
+    // Default / General / Traffic (Line Chart)
+    return (
+        <div className="w-full h-full flex items-end pb-4 px-2">
+            <svg viewBox="0 0 100 40" className="w-full h-[70%] overflow-visible" preserveAspectRatio="none">
+                <path 
+                    d="M0,35 Q25,40 50,20 T100,5" 
+                    fill="none" 
+                    stroke={stroke} 
+                    strokeWidth="3" 
+                    strokeLinecap="round"
+                    className="drop-shadow-sm"
+                />
+                <circle cx="0" cy="35" r="2" fill={stroke} />
+                <circle cx="50" cy="20" r="2" fill={stroke} />
+                <circle cx="100" cy="5" r="2" fill={stroke} />
+            </svg>
+        </div>
+    );
+};
+
 export const DashboardTemplateSelector: React.FC<TemplateSelectorProps> = ({ currentTemplateId, onSelect, onClose }) => {
     const categories = [
         { id: 'all', label: 'Todos' },
@@ -45,6 +139,13 @@ export const DashboardTemplateSelector: React.FC<TemplateSelectorProps> = ({ cur
                 {filteredTemplates.map(template => {
                     const isSelected = template.id === currentTemplateId;
                     
+                    const colorClass = 
+                        template.category === 'ecom' ? 'bg-emerald-500' :
+                        template.category === 'leads' ? 'bg-blue-500' :
+                        template.category === 'messaging' ? 'bg-sky-500' :
+                        template.category === 'awareness' ? 'bg-purple-500' :
+                        'bg-primary';
+
                     return (
                         <div
                             key={template.id}
@@ -54,22 +155,32 @@ export const DashboardTemplateSelector: React.FC<TemplateSelectorProps> = ({ cur
                                 : 'border-gray-200 dark:border-[#292348] hover:border-primary/50 hover:shadow-lg'
                             }`}
                         >
-                            {/* Header / Icon Area */}
-                            <div className="relative h-32 bg-gradient-to-br from-gray-100 to-gray-200 dark:from-[#25213a] dark:to-[#1a1729] flex items-center justify-center">
-                                <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-white shadow-lg ${
-                                    template.category === 'ecom' ? 'bg-emerald-500' :
-                                    template.category === 'leads' ? 'bg-blue-500' :
-                                    template.category === 'messaging' ? 'bg-sky-500' :
-                                    template.category === 'awareness' ? 'bg-purple-500' :
-                                    'bg-primary'
-                                }`}>
-                                    <span className="material-symbols-outlined text-[32px]">{template.icon}</span>
+                            {/* Header / Chart Preview Area */}
+                            <div className="relative h-32 bg-gray-50 dark:bg-[#151221] border-b border-gray-100 dark:border-[#292348] flex items-end justify-center overflow-hidden">
+                                {/* Decorative Grid */}
+                                <div 
+                                    className="absolute inset-0 opacity-[0.03] pointer-events-none" 
+                                    style={{ 
+                                        backgroundImage: 'radial-gradient(currentColor 1px, transparent 1px)', 
+                                        backgroundSize: '16px 16px' 
+                                    }}
+                                ></div>
+                                
+                                {/* Dynamic Chart */}
+                                <div className="w-full h-24 px-4 relative z-10 group-hover:scale-105 transition-transform duration-500 origin-bottom">
+                                    <ChartPreview type={template.category} colorClass={colorClass} />
                                 </div>
+
+                                {/* Floating Icon Badge */}
+                                <div className={`absolute top-3 left-3 w-8 h-8 rounded-lg flex items-center justify-center text-white shadow-lg ${colorClass} z-20`}>
+                                    <span className="material-symbols-outlined text-[18px]">{template.icon}</span>
+                                </div>
+
                                 {isSelected && (
-                                    <div className="absolute top-3 right-3">
-                                        <span className="flex items-center gap-1 rounded-full bg-primary px-3 py-1 text-xs font-bold text-white shadow-md">
-                                            <span className="material-symbols-outlined text-[14px]">check_circle</span>
-                                            Padrão
+                                    <div className="absolute top-3 right-3 z-20">
+                                        <span className="flex items-center gap-1 rounded-full bg-primary/90 backdrop-blur-sm px-2.5 py-0.5 text-[10px] font-bold text-white shadow-md border border-white/10">
+                                            <span className="material-symbols-outlined text-[12px]">check</span>
+                                            Ativo
                                         </span>
                                     </div>
                                 )}
@@ -79,8 +190,7 @@ export const DashboardTemplateSelector: React.FC<TemplateSelectorProps> = ({ cur
                             <div className="flex flex-1 flex-col p-5">
                                 <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1">{template.name}</h3>
                                 <div className="flex items-center gap-2 mb-3">
-                                    <span className="material-symbols-outlined text-xs text-slate-400 dark:text-text-secondary">{template.icon}</span>
-                                    <span className="text-xs font-medium uppercase tracking-wider text-slate-400 dark:text-text-secondary">
+                                    <span className="text-xs font-medium uppercase tracking-wider text-slate-400 dark:text-text-secondary flex items-center gap-1">
                                         Foco: {template.category === 'ecom' ? 'Vendas' : template.category === 'leads' ? 'Cadastros' : template.category === 'messaging' ? 'Conversas' : template.category === 'awareness' ? 'Alcance' : 'Geral'}
                                     </span>
                                 </div>
