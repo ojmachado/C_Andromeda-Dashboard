@@ -46,36 +46,81 @@ export const KpiGrid: React.FC<{ children: React.ReactNode }> = ({ children }) =
   </div>
 );
 
-export const ChartContainer: React.FC<{ title: string; data?: { date: string, value: number }[]; isLoading?: boolean; yAxisLabel?: string }> = ({ title, data = [], isLoading, yAxisLabel }) => {
-  const maxVal = Math.max(...data.map(d => d.value), 1);
-  
-  // Create SVG path for the line
-  const width = 1000;
-  const height = 200;
-  const paddingLeft = yAxisLabel ? 40 : 0;
-  const graphWidth = width - paddingLeft;
-  
-  const points = data.map((d, i) => {
-      const x = paddingLeft + (i / (data.length - 1 || 1)) * graphWidth;
-      const y = height - (d.value / maxVal) * height; // Invert Y because SVG 0 is top
-      return `${x},${y}`;
-  }).join(' ');
+// Enhanced Data Point Interface
+export interface ChartDataPoint {
+    date: string;
+    value?: number; // legacy/simple support
+    spend?: number;
+    conversations?: number;
+    [key: string]: any;
+}
 
-  const areaPath = `${points} ${width},${height} ${paddingLeft},${height}`;
+export const ChartContainer: React.FC<{ title: string; data?: ChartDataPoint[]; isLoading?: boolean; yAxisLabel?: string }> = ({ title, data = [], isLoading, yAxisLabel }) => {
+  const isDualLine = data.length > 0 && typeof data[0].spend === 'number' && typeof data[0].conversations === 'number';
+
+  // Helper for generating path d attribute
+  const getPath = (key: 'value' | 'spend' | 'conversations', width: number, height: number) => {
+      const values = data.map(d => d[key] as number || 0);
+      const max = Math.max(...values, 1); // Avoid division by zero
+      
+      return values.map((val, i) => {
+          const x = (i / (values.length - 1 || 1)) * width;
+          // Normalize value to height (0 to height)
+          const y = height - (val / max) * (height - 20) - 10; // 10px padding top/bottom
+          return `${i === 0 ? 'M' : 'L'} ${x},${y}`;
+      }).join(' ');
+  };
+
+  // Helper for smooth bezier
+  const getSmoothPath = (key: 'value' | 'spend' | 'conversations', width: number, height: number) => {
+      const values = data.map(d => d[key] as number || 0);
+      const max = Math.max(...values, 1);
+      
+      const points = values.map((val, i) => {
+          const x = (i / (values.length - 1 || 1)) * width;
+          const y = height - (val / max) * (height - 20) - 10;
+          return [x, y];
+      });
+
+      if (points.length === 0) return "";
+      let d = `M ${points[0][0]},${points[0][1]}`;
+
+      for (let i = 0; i < points.length - 1; i++) {
+          const [x0, y0] = points[i];
+          const [x1, y1] = points[i + 1];
+          const cp1x = x0 + (x1 - x0) * 0.5;
+          const cp1y = y0;
+          const cp2x = x1 - (x1 - x0) * 0.5;
+          const cp2y = y1;
+          d += ` C ${cp1x},${cp1y} ${cp2x},${cp2y} ${x1},${y1}`;
+      }
+      return d;
+  };
 
   return (
     <Card className="p-6">
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-wrap justify-between items-center mb-6 gap-4">
         <h4 className="font-bold text-slate-800 dark:text-white">{title}</h4>
+        
+        {isDualLine && !isLoading && (
+            <div className="flex items-center gap-4 text-xs font-medium">
+                <div className="flex items-center gap-2">
+                    <div className="w-8 h-0.5 bg-[#3713ec] relative">
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-[#3713ec]"></div>
+                    </div>
+                    <span className="text-slate-600 dark:text-slate-300">Investimento</span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <div className="w-8 h-0.5 bg-[#10b981] relative">
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-[#10b981]"></div>
+                    </div>
+                    <span className="text-slate-600 dark:text-slate-300">Conversas</span>
+                </div>
+            </div>
+        )}
       </div>
       
-      <div className="h-64 w-full relative flex">
-          {yAxisLabel && (
-              <div className="absolute -left-8 top-1/2 -translate-y-1/2 -rotate-90 text-xs text-slate-500 font-mono uppercase tracking-widest whitespace-nowrap origin-center">
-                  {yAxisLabel}
-              </div>
-          )}
-
+      <div className="h-64 w-full relative">
           {isLoading ? (
              <Skeleton className="w-full h-full rounded-lg" />
           ) : data.length === 0 ? (
@@ -83,46 +128,75 @@ export const ChartContainer: React.FC<{ title: string; data?: { date: string, va
                  Sem dados suficientes para gerar o gráfico.
              </div>
           ) : (
-             <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full overflow-visible preserve-3d">
-                 <defs>
-                    <linearGradient id="gradient" x1="0" x2="0" y1="0" y2="1">
-                        <stop offset="0%" stopColor="#3713ec" stopOpacity="0.4" />
-                        <stop offset="100%" stopColor="#3713ec" stopOpacity="0" />
-                    </linearGradient>
-                 </defs>
+             <svg viewBox="0 0 1000 250" className="w-full h-full overflow-visible preserve-3d">
                  {/* Grid lines */}
-                 <line x1={paddingLeft} y1={height} x2={width} y2={height} stroke="#334155" strokeWidth="1" strokeDasharray="4 4" opacity="0.5" />
-                 <line x1={paddingLeft} y1={height/2} x2={width} y2={height/2} stroke="#334155" strokeWidth="1" strokeDasharray="4 4" opacity="0.3" />
+                 {[0, 0.25, 0.5, 0.75, 1].map(p => (
+                     <line key={p} x1="0" y1={250 * p} x2="1000" y2={250 * p} stroke="#334155" strokeWidth="1" strokeDasharray="4 4" opacity="0.1" />
+                 ))}
 
-                 {/* Area */}
-                 <polygon points={areaPath} fill="url(#gradient)" />
+                 {isDualLine ? (
+                     <>
+                        {/* Spend Line */}
+                        <path d={getSmoothPath('spend', 1000, 250)} fill="none" stroke="#3713ec" strokeWidth="3" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+                        
+                        {/* Conversations Line */}
+                        <path d={getSmoothPath('conversations', 1000, 250)} fill="none" stroke="#10b981" strokeWidth="3" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
 
-                 {/* Line */}
-                 <polyline points={points} fill="none" stroke="#3713ec" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-                 
-                 {/* Data Points (only show if few points) */}
-                 {data.length < 30 && data.map((d, i) => {
-                     const x = paddingLeft + (i / (data.length - 1 || 1)) * graphWidth;
-                     const y = height - (d.value / maxVal) * height;
-                     return (
-                         <g key={i} className="group/point">
-                             <circle cx={x} cy={y} r="4" fill="#131022" stroke="#3713ec" strokeWidth="2" className="group-hover/point:scale-150 transition-transform cursor-pointer" />
-                             {/* Tooltip */}
-                             <foreignObject x={x - 60} y={y - 50} width="120" height="40" className="opacity-0 group-hover/point:opacity-100 transition-opacity pointer-events-none">
-                                <div className="bg-slate-900 text-white text-[10px] rounded px-2 py-1 text-center shadow-lg border border-slate-700">
-                                    <div className="font-bold">{d.date}</div>
-                                    <div>{d.value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</div>
-                                </div>
-                             </foreignObject>
-                         </g>
-                     );
-                 })}
+                        {/* Interactive Overlay & Points */}
+                        {data.map((d, i) => {
+                             // Re-calculate Y positions for dots matches the path logic
+                             const maxSpend = Math.max(...data.map(x => x.spend || 0), 1);
+                             const maxConv = Math.max(...data.map(x => x.conversations || 0), 1);
+                             
+                             const x = (i / (data.length - 1 || 1)) * 1000;
+                             const ySpend = 250 - ((d.spend || 0) / maxSpend) * 230 - 10;
+                             const yConv = 250 - ((d.conversations || 0) / maxConv) * 230 - 10;
+
+                             return (
+                                 <g key={i} className="group/point">
+                                     {/* Invisible hover bar */}
+                                     <rect x={x - 10} y="0" width="20" height="250" fill="transparent" className="cursor-pointer" />
+                                     
+                                     {/* Vertical Guide Line on Hover */}
+                                     <line x1={x} y1="0" x2={x} y2="250" stroke="white" strokeWidth="1" opacity="0" className="group-hover/point:opacity-20 transition-opacity" />
+
+                                     {/* Spend Dot */}
+                                     <circle cx={x} cy={ySpend} r="4" fill="#131022" stroke="#3713ec" strokeWidth="2" className="opacity-0 group-hover/point:opacity-100 transition-opacity" />
+                                     
+                                     {/* Conv Dot */}
+                                     <circle cx={x} cy={yConv} r="4" fill="#131022" stroke="#10b981" strokeWidth="2" className="opacity-0 group-hover/point:opacity-100 transition-opacity" />
+
+                                     {/* Tooltip */}
+                                     <foreignObject x={Math.min(Math.max(x - 75, 0), 850)} y="0" width="150" height="100" className="opacity-0 group-hover/point:opacity-100 transition-opacity pointer-events-none z-50">
+                                        <div className="bg-slate-900/95 backdrop-blur-md text-white text-[11px] rounded-lg p-2 shadow-xl border border-slate-700/50 flex flex-col gap-1">
+                                            <div className="font-bold text-slate-300 border-b border-white/10 pb-1 mb-1 text-center">{d.date}</div>
+                                            <div className="flex justify-between items-center gap-3">
+                                                <span className="text-[#818cf8]">Investimento:</span>
+                                                <span className="font-mono font-bold">{(d.spend || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center gap-3">
+                                                <span className="text-[#34d399]">Conversas:</span>
+                                                <span className="font-mono font-bold">{(d.conversations || 0).toLocaleString('pt-BR')}</span>
+                                            </div>
+                                        </div>
+                                     </foreignObject>
+                                 </g>
+                             );
+                        })}
+                     </>
+                 ) : (
+                     // Fallback Single Line
+                     <>
+                        <path d={getSmoothPath('value', 1000, 250)} fill="none" stroke="#3713ec" strokeWidth="3" vectorEffect="non-scaling-stroke" />
+                     </>
+                 )}
              </svg>
           )}
       </div>
       {!isLoading && data.length > 0 && (
-          <div className="flex justify-between text-xs text-text-secondary mt-2 font-mono" style={{ paddingLeft: paddingLeft }}>
+          <div className="flex justify-between text-xs text-text-secondary mt-2 font-mono uppercase tracking-widest">
               <span>{data[0]?.date}</span>
+              <span>{data[Math.floor(data.length/2)]?.date}</span>
               <span>{data[data.length - 1]?.date}</span>
           </div>
       )}

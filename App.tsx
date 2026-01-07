@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Link, useParams, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { AppShell } from './components/Navigation';
 import { Button, Card, Badge, Skeleton, Modal } from './components/UI';
@@ -81,7 +81,7 @@ const DashboardPage = ({ workspaces, onUpdateWorkspace, sdkReady }: { workspaces
   const [isExporting, setIsExporting] = useState(false); // State for PDF export
   const [stats, setStats] = useState<any>(null);
   const [campaigns, setCampaigns] = useState<InsightData[]>([]);
-  const [trendData, setTrendData] = useState<{date: string, value: number}[]>([]);
+  const [trendData, setTrendData] = useState<any[]>([]);
   
   // Template State
   const [currentTemplate, setCurrentTemplate] = useState<DashboardTemplate>(SecureKV.getWorkspaceTemplate(workspaceId || ''));
@@ -219,10 +219,11 @@ const DashboardPage = ({ workspaces, onUpdateWorkspace, sdkReady }: { workspaces
              // Show all demo data regardless of impressions
              setCampaigns(processedDemoItems);
              
-             // Mock Trend Data
+             // Mock Trend Data (Dual Line)
              const trend = Array.from({length: 15}, (_, i) => ({
                  date: new Date(Date.now() - (14-i) * 86400000).toLocaleDateString('pt-BR', {day: '2-digit', month: '2-digit'}),
-                 value: Math.random() * 200 + 50
+                 spend: Math.random() * 200 + 50,
+                 conversations: Math.floor(Math.random() * 20)
              }));
              setTrendData(trend);
              loadingState(false);
@@ -271,11 +272,11 @@ const DashboardPage = ({ workspaces, onUpdateWorkspace, sdkReady }: { workspaces
           }, (res: any) => resolve(res));
       });
 
-      // 4. Daily Trend (Spend)
+      // 4. Daily Trend (Spend + Conversations)
       const p4 = new Promise<any>((resolve) => {
           window.FB.api(`/${accountId}/insights`, { 
               access_token: token, 
-              fields: 'spend,date_start',
+              fields: 'spend,actions,date_start',
               time_increment: 1,
               ...apiTimeParams
           }, (res: any) => resolve(res));
@@ -390,10 +391,15 @@ const DashboardPage = ({ workspaces, onUpdateWorkspace, sdkReady }: { workspaces
 
           // Process Trend
           if (trendRes && !trendRes.error && trendRes.data) {
-              const trend = trendRes.data.map((d: any) => ({
-                  date: new Date(d.date_start).toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'}),
-                  value: parseFloat(d.spend || '0')
-              })).reverse();
+              const trend = trendRes.data.map((d: any) => {
+                  const msgs = d.actions?.find((a: any) => a.action_type === 'onsite_conversion.messaging_conversation_started_7d' || a.action_type === 'messaging_conversation_started_7d');
+                  return {
+                      date: new Date(d.date_start).toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'}),
+                      spend: parseFloat(d.spend || '0'),
+                      conversations: msgs ? parseFloat(msgs.value) : 0,
+                      value: parseFloat(d.spend || '0') // keep basic value for compatibility if chart component wasn't updated
+                  };
+              }).reverse();
               setTrendData(trend);
           } else {
               setTrendData([]);
@@ -415,218 +421,161 @@ const DashboardPage = ({ workspaces, onUpdateWorkspace, sdkReady }: { workspaces
     fetchData();
   }, [workspaceId, sdkReady, workspaces, dateRange, customDates, viewLevel]);
 
-  const handleRefresh = () => {
-    setIsRefreshing(true);
-    fetchData();
+  // --- Helpers for UI Logic ---
+
+  const toggleObjective = (obj: string) => {
+    setSelectedObjectives(prev => 
+      prev.includes(obj) ? prev.filter(o => o !== obj) : [...prev, obj]
+    );
   };
 
-  const handleExportPDF = async () => {
-        const element = document.getElementById('dashboard-content');
-        if(!element) return;
-        setIsExporting(true);
-        try {
-            // Using html2canvas to capture the element
-            const canvas = await html2canvas(element, {
-                scale: 2, // Improve resolution
-                backgroundColor: '#131022', // Match dark mode background
-                useCORS: true, // Allow loading cross-origin images (avatars, etc.)
-                logging: false,
-                ignoreElements: (el) => el.classList.contains('no-print') // Ignore elements with no-print class
-            });
-
-            const imgData = canvas.toDataURL('image/png');
-            
-            // Calculate dimensions to fit in PDF (Landscape)
-            // We create a PDF size that matches the canvas ratio to avoid cutting content
-            // or we use standard A4 landscape but fit content.
-            // For dashboards, a custom page size often looks best for digital distribution.
-            const pdfWidth = canvas.width;
-            const pdfHeight = canvas.height;
-
-            const pdf = new jsPDF({
-                orientation: 'landscape',
-                unit: 'px',
-                format: [pdfWidth, pdfHeight]
-            });
-
-            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-            pdf.save(`Andromeda-Dashboard-${workspaceId}-${new Date().toISOString().split('T')[0]}.pdf`);
-        } catch (err) {
-            console.error("Failed to export PDF", err);
-            alert("Erro ao gerar PDF. Tente novamente.");
-        } finally {
-            setIsExporting(false);
-        }
-  };
-
-  // Helper: Get value for dynamic KPI
-  const getKpiValue = (key: string): { value: string, subValue?: string, trend: 'up' | 'down' | 'neutral' } => {
-      const getAction = (type: string) => {
-          if (!stats?.actions) return 0;
-          const a = stats.actions.find((x: any) => x.action_type === type);
-          return a ? parseFloat(a.value) : 0;
-      };
-
-      let val = 0;
-      let trend: 'up' | 'down' | 'neutral' = 'neutral';
-      let subValue = undefined;
-
-      switch(key) {
-          case 'spend':
-              val = parseFloat(stats?.spend || '0');
-              trend = 'up';
-              subValue = '+12.5%';
-              break;
-          case 'roas':
-              val = parseFloat(stats?.purchase_roas?.[0]?.value || '0');
-              trend = val > 2 ? 'up' : 'down';
-              subValue = val > 2 ? 'Saudável' : 'Atenção';
-              break;
-          case 'purchases':
-              val = getAction('purchase') || getAction('offsite_conversion.fb_pixel_purchase');
-              trend = 'up';
-              break;
-          case 'leads':
-              val = getAction('lead') || getAction('on_facebook_lead');
-              trend = 'up';
-              break;
-          case 'add_to_cart':
-              val = getAction('add_to_cart') || getAction('offsite_conversion.fb_pixel_add_to_cart');
-              trend = 'up';
-              break;
-          case 'messages':
-              val = getAction('onsite_conversion.messaging_conversation_started_7d') || getAction('messaging_conversation_started_7d');
-              trend = 'up';
-              break;
-          case 'cpa': 
-              {
-                  const sales = getAction('purchase') || getAction('offsite_conversion.fb_pixel_purchase');
-                  const spend = parseFloat(stats?.spend || '0');
-                  val = sales > 0 ? spend / sales : 0;
-                  trend = val > 50 ? 'down' : 'up';
-              }
-              break;
-          case 'cpl':
-              {
-                  const leads = getAction('lead') || getAction('on_facebook_lead');
-                  const spend = parseFloat(stats?.spend || '0');
-                  val = leads > 0 ? spend / leads : 0;
-                  trend = 'neutral';
-              }
-              break;
-          case 'cost_per_message':
-              {
-                  const msgs = getAction('onsite_conversion.messaging_conversation_started_7d') || getAction('messaging_conversation_started_7d');
-                  const spend = parseFloat(stats?.spend || '0');
-                  val = msgs > 0 ? spend / msgs : 0;
-                  trend = 'neutral';
-              }
-              break;
-          case 'impressions':
-              val = parseInt(stats?.impressions || '0');
-              trend = 'up';
-              break;
-          case 'clicks':
-              val = parseInt(stats?.clicks || '0');
-              trend = 'neutral';
-              break;
-          case 'ctr':
-              val = parseFloat(stats?.ctr || '0');
-              trend = val > 1 ? 'up' : 'down';
-              break;
-          case 'cpc':
-              val = parseFloat(stats?.cpc || '0');
-              trend = 'neutral';
-              break;
-          case 'cpm':
-              val = parseFloat(stats?.cpm || '0');
-              trend = 'down';
-              break;
-          case 'frequency':
-              // Frequency isn't usually in overview without special query, using mock fallback or approximation
-              const impr = parseInt(stats?.impressions || '0');
-              const reach = parseInt(stats?.reach || impr * 0.8); // approximation if reach missing
-              val = reach > 0 ? impr / reach : 1;
-              break;
-          case 'aov':
-              {
-                  // Mock AOV or try to calculate if value exists
-                  val = 0; // Not easily available without action values breakdown in this context
-              }
-              break;
-          default:
-              val = 0;
-      }
-
-      // Formatting
-      const kpiConfig = currentTemplate.kpis.find(k => k.key === key);
-      let formatted = val.toString();
-      
-      if (kpiConfig?.format === 'currency') formatted = val.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
-      else if (kpiConfig?.format === 'percent') formatted = `${val.toFixed(2)}%`;
-      else if (kpiConfig?.format === 'multiplier') formatted = `${val.toFixed(2)}x`;
-      else if (kpiConfig?.format === 'number') formatted = val.toLocaleString('pt-BR');
-
-      // Adjust trend color logic based on config
-      if (kpiConfig?.trendCheck) {
-          if (kpiConfig.trendCheck === 'low_is_good') {
-              // Inverse logic (e.g., CPA, CPM)
-              // This is a simple visual toggle, in a real app would compare to prev period
-              if (trend === 'up') trend = 'down'; 
-              else if (trend === 'down') trend = 'up';
-          }
-      }
-
-      return { value: formatted, subValue, trend };
-  };
-
-  // Handle Date Filter Click
-  const handleDatePreset = (preset: DateRangePreset) => {
+  const handleDatePreset = (preset: DateRangePreset | 'custom') => {
       if (preset === 'custom') {
           setIsDateModalOpen(true);
       } else {
-          setDateRange(preset);
+          setDateRange(preset as DateRangePreset);
+          setCustomDates({ start: '', end: '' });
       }
   };
 
   const applyCustomDate = () => {
-      if (tempCustomDates.start && tempCustomDates.end) {
-          setCustomDates(tempCustomDates);
-          setDateRange('custom');
-          setIsDateModalOpen(false);
+      setCustomDates(tempCustomDates);
+      setDateRange('custom');
+      setIsDateModalOpen(false);
+  };
+
+  const handleRefresh = () => {
+      setIsRefreshing(true);
+      fetchData();
+  };
+
+  const handleExportPDF = async () => {
+      const element = document.getElementById('dashboard-content');
+      if(!element) return;
+      setIsExporting(true);
+      try {
+          const canvas = await html2canvas(element, {
+              scale: 2,
+              backgroundColor: '#131022', // Match dark theme bg
+              useCORS: true,
+              ignoreElements: (el) => el.classList.contains('no-print')
+          });
+
+          const imgData = canvas.toDataURL('image/png');
+          // Use pt units for PDF
+          const pdf = new jsPDF({
+              orientation: 'landscape',
+              unit: 'pt',
+              format: [canvas.width * 0.75, canvas.height * 0.75] // rough px to pt conversion
+          });
+
+          const pdfWidth = pdf.internal.pageSize.getWidth();
+          const pdfHeight = pdf.internal.pageSize.getHeight();
+          
+          pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+          pdf.save(`Dashboard-${currentWorkspace?.name || 'Workspace'}-${new Date().toISOString().split('T')[0]}.pdf`);
+      } catch (err) {
+          console.error("PDF Export failed", err);
+          alert("Erro ao exportar PDF.");
+      } finally {
+          setIsExporting(false);
       }
   };
 
-  // Filter Logic
-  const filteredCampaigns = campaigns.filter(c => {
-      if (selectedObjectives.length === 0) return true;
-      return c.objective && selectedObjectives.includes(c.objective);
-  });
+  const getKpiValue = (key: string) => {
+      // Helper to extract value safely from stats object
+      // Stats structure depends on the API call result in fetchData
+      
+      if (!stats) return { value: '-', trend: 'neutral' };
 
-  const toggleObjective = (obj: string) => {
-      setSelectedObjectives(prev => 
-          prev.includes(obj) ? prev.filter(o => o !== obj) : [...prev, obj]
-      );
+      // Helper to parse potential string numbers from API
+      const val = (v: any) => typeof v === 'string' ? parseFloat(v) : (typeof v === 'number' ? v : 0);
+
+      let rawValue = 0;
+      let formattedValue = '-';
+      let trend: 'up' | 'down' | 'neutral' = 'neutral';
+      
+      // Basic extraction
+      switch (key) {
+          case 'spend':
+              rawValue = val(stats.spend);
+              formattedValue = rawValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+              break;
+          case 'impressions':
+              rawValue = val(stats.impressions);
+              formattedValue = rawValue.toLocaleString('pt-BR');
+              break;
+          case 'clicks':
+              rawValue = val(stats.clicks);
+              formattedValue = rawValue.toLocaleString('pt-BR');
+              break;
+          case 'ctr':
+              rawValue = val(stats.ctr);
+              formattedValue = rawValue.toFixed(2) + '%';
+              break;
+          case 'cpc':
+              rawValue = val(stats.cpc);
+              formattedValue = rawValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+              break;
+          case 'cpm':
+              rawValue = val(stats.cpm);
+              formattedValue = rawValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+              break;
+          case 'roas':
+              rawValue = stats.purchase_roas ? val(stats.purchase_roas[0]?.value) : 0;
+              formattedValue = rawValue.toFixed(2) + 'x';
+              trend = rawValue > 2 ? 'up' : 'down';
+              break;
+          case 'purchases':
+              const pAction = stats.actions?.find((a: any) => a.action_type === 'purchase' || a.action_type === 'offsite_conversion.fb_pixel_purchase');
+              rawValue = pAction ? val(pAction.value) : 0;
+              formattedValue = rawValue.toLocaleString('pt-BR');
+              break;
+          case 'cpa':
+               const pCount = stats.actions?.find((a: any) => a.action_type === 'purchase' || a.action_type === 'offsite_conversion.fb_pixel_purchase')?.value;
+               const spend = val(stats.spend);
+               rawValue = pCount > 0 ? spend / val(pCount) : 0;
+               formattedValue = rawValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+               break;
+          case 'messages':
+               const mAction = stats.actions?.find((a: any) => a.action_type === 'onsite_conversion.messaging_conversation_started_7d' || a.action_type === 'messaging_conversation_started_7d');
+               rawValue = mAction ? val(mAction.value) : 0;
+               formattedValue = rawValue.toLocaleString('pt-BR');
+               break;
+          case 'cost_per_message':
+               const mCount = stats.actions?.find((a: any) => a.action_type === 'onsite_conversion.messaging_conversation_started_7d' || a.action_type === 'messaging_conversation_started_7d')?.value;
+               const spendM = val(stats.spend);
+               rawValue = mCount > 0 ? spendM / val(mCount) : 0;
+               formattedValue = rawValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+               break;
+          case 'leads':
+               const lAction = stats.actions?.find((a: any) => a.action_type === 'lead');
+               rawValue = lAction ? val(lAction.value) : 0;
+               formattedValue = rawValue.toLocaleString('pt-BR');
+               break;
+          case 'cpl':
+               const lCount = stats.actions?.find((a: any) => a.action_type === 'lead')?.value;
+               const spendL = val(stats.spend);
+               rawValue = lCount > 0 ? spendL / val(lCount) : 0;
+               formattedValue = rawValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+               break;
+          default:
+               // Fallback if key not found but might be in stats directly
+               if (stats && stats[key]) {
+                   rawValue = val(stats[key]);
+                   formattedValue = rawValue.toLocaleString('pt-BR');
+               }
+               break;
+      }
+
+      return { value: formattedValue, trend };
   };
 
-  if (!currentWorkspace?.metaConnected && workspaceId !== 'wk_demo') {
-      return (
-          <AppShell workspaces={workspaces} activeWorkspaceId={workspaceId}>
-              <div className="max-w-4xl mx-auto py-20 px-6 text-center">
-                  <div className="w-24 h-24 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
-                      <span className="material-symbols-outlined text-5xl text-red-500">link_off</span>
-                  </div>
-                  <h1 className="text-3xl font-black text-white mb-4">Workspace Desconectado</h1>
-                  <p className="text-text-secondary mb-8 max-w-lg mx-auto">
-                      Este workspace ainda não está conectado a uma conta de anúncios do Meta Ads. Configure a conexão para visualizar os dados.
-                  </p>
-                  <Button onClick={() => navigate(`/w/${workspaceId}/setup`)}>
-                      Conectar Meta Ads
-                  </Button>
-              </div>
-          </AppShell>
-      );
-  }
+  const filteredCampaigns = useMemo(() => {
+      if (selectedObjectives.length === 0) return campaigns;
+      return campaigns.filter(c => c.objective && selectedObjectives.includes(c.objective));
+  }, [campaigns, selectedObjectives]);
+
 
   return (
     <AppShell workspaces={workspaces} activeWorkspaceId={workspaceId}>
@@ -821,7 +770,7 @@ const DashboardPage = ({ workspaces, onUpdateWorkspace, sdkReady }: { workspaces
 
             {/* Trend Chart */}
             <ChartContainer 
-                title={`Tendência de Investimento (${dateRange === 'custom' ? 'Customizado' : dateRange.replace('_', ' ').toUpperCase()})`} 
+                title={`Tendência: Investimento vs Conversas (${dateRange === 'custom' ? 'Customizado' : dateRange.replace('_', ' ').toUpperCase()})`} 
                 data={trendData} 
                 isLoading={isLoading && !isRefreshing} 
                 yAxisLabel="Investimento (BRL)"
@@ -880,165 +829,109 @@ const DashboardPage = ({ workspaces, onUpdateWorkspace, sdkReady }: { workspaces
   );
 };
 
-const WorkspaceSetupWrapper = ({ workspaces, onUpdate, sdkReady }: { workspaces: Workspace[], onUpdate: (w: Workspace) => void, sdkReady: boolean }) => {
+// Helper for workspace routes to extract workspace object
+const WorkspaceRouteWrapper = ({ workspaces, children }: { workspaces: Workspace[], children: (w: Workspace) => React.ReactNode }) => {
     const { workspaceId } = useParams();
-    const workspace = workspaces.find(w => w.id === workspaceId);
-    
-    if (!workspace) return <Navigate to="/workspaces" />;
-    
-    return <SetupWizard workspace={workspace} onUpdateWorkspace={onUpdate} sdkReady={sdkReady} />;
-};
-
-const ProtectedRoute = ({ children, isAuthenticated }: { children?: React.ReactNode, isAuthenticated: boolean }) => {
-    if (!isAuthenticated) return <Navigate to="/login" replace />;
-    return <>{children}</>;
+    const ws = workspaces.find(w => w.id === workspaceId);
+    if (!ws) return <div className="p-10 text-center text-white">Workspace não encontrado</div>;
+    return <>{children(ws)}</>;
 };
 
 const App = () => {
-    const [sdkReady, setSdkReady] = useState(false);
-    const [isAuthenticated, setIsAuthenticated] = useState(false);
-    const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [sdkReady, setSdkReady] = useState(false);
+  const [session, setSession] = useState(SecureKV.getSession());
 
-    // Initialize with a demo workspace for better UX upon first load
-    const [workspaces, setWorkspaces] = useState<Workspace[]>([
-        { id: 'wk_demo', name: 'Demo Store', metaConnected: false }
-    ]);
+  // Load Workspaces Mock (or from KV if persisted)
+  useEffect(() => {
+      // For demo purposes, we can init some workspaces if none
+      const demoWorkspaces: Workspace[] = [
+          { id: 'wk_demo', name: 'Demo Store', metaConnected: true, preferredTemplateId: 'tpl_ecom' },
+          { id: 'wk_client_a', name: 'Client A', metaConnected: false }
+      ];
+      setWorkspaces(demoWorkspaces);
+  }, []);
 
-    useEffect(() => {
-        const checkAuth = () => {
-            const session = SecureKV.getSession();
-            if (session && session.email) {
-                setIsAuthenticated(true);
-            }
-            setIsCheckingAuth(false);
-        };
-        checkAuth();
-    }, []);
+  // Init Facebook SDK
+  useEffect(() => {
+      const initSDK = async () => {
+          const config = await SecureKV.getMetaConfig();
+          const appId = config?.appId || '1234567890'; // Default or Mock
 
-    useEffect(() => {
-        const initSDK = async () => {
-            const config = await SecureKV.getMetaConfig();
-            
-            // Setup Global Callback
-            window.fbAsyncInit = function() {
-                window.FB.init({
-                    appId: config?.appId || '',
-                    cookie: true,
-                    xfbml: true,
-                    version: 'v18.0'
-                });
-                setSdkReady(true);
-            };
+          window.fbAsyncInit = function() {
+            window.FB.init({
+              appId            : appId,
+              cookie           : true,
+              xfbml            : true,
+              version          : 'v19.0'
+            });
+            setSdkReady(true);
+          };
 
-            // Load Script
-            (function(d, s, id){
-                var js, fjs = d.getElementsByTagName(s)[0];
-                if (d.getElementById(id)) { return; }
-                js = d.createElement(s) as HTMLScriptElement; js.id = id;
-                js.src = "https://connect.facebook.net/en_US/sdk.js";
-                if (fjs && fjs.parentNode) {
-                    fjs.parentNode.insertBefore(js, fjs);
-                } else {
-                    d.head.appendChild(js);
-                }
-            }(document, 'script', 'facebook-jssdk'));
-        };
+          // Load script
+          (function(d, s, id){
+             var js, fjs = d.getElementsByTagName(s)[0];
+             if (d.getElementById(id)) {return;}
+             js = d.createElement(s) as HTMLScriptElement; js.id = id;
+             js.src = "https://connect.facebook.net/en_US/sdk.js";
+             if (fjs.parentNode) fjs.parentNode.insertBefore(js, fjs);
+           }(document, 'script', 'facebook-jssdk'));
+      };
+      
+      initSDK();
+  }, []);
 
-        initSDK();
-    }, []);
+  const handleCreateWorkspace = (name: string) => {
+      const newWs: Workspace = {
+          id: `wk_${Date.now()}`,
+          name,
+          metaConnected: false
+      };
+      setWorkspaces([...workspaces, newWs]);
+  };
 
-    const handleCreateWorkspace = (name: string) => {
-        const newWk: Workspace = {
-            id: `wk_${Date.now()}`,
-            name,
-            metaConnected: false
-        };
-        setWorkspaces([...workspaces, newWk]);
-    };
+  const handleUpdateWorkspace = (updated: Workspace) => {
+      setWorkspaces(prev => prev.map(w => w.id === updated.id ? updated : w));
+  };
+  
+  const handleLogin = () => {
+      setSession(SecureKV.getSession());
+  };
 
-    const handleUpdateWorkspace = (updated: Workspace) => {
-        setWorkspaces(prev => prev.map(w => w.id === updated.id ? updated : w));
-    };
+  return (
+    <Routes>
+        {/* Public Routes */}
+        <Route path="/login" element={!session ? <LoginPage onLogin={handleLogin} /> : <Navigate to="/workspaces" />} />
+        <Route path="/s/:shareId" element={<SharedReportPage />} />
+        <Route path="/shared/dashboard/:shareId" element={<SharedWorkspaceDashboard />} />
 
-    if (isCheckingAuth) return <div className="h-screen bg-background-dark"></div>;
+        {/* Protected Routes */}
+        {session ? (
+            <>
+                <Route path="/workspaces" element={<WorkspacesPage workspaces={workspaces} onCreateWorkspace={handleCreateWorkspace} />} />
+                <Route path="/integrations" element={<IntegrationsPage />} />
+                <Route path="/account" element={<AccountSettingsPage workspaces={workspaces} />} />
+                
+                {/* Workspace Specific */}
+                <Route path="/w/:workspaceId/dashboard" element={<DashboardPage workspaces={workspaces} onUpdateWorkspace={handleUpdateWorkspace} sdkReady={sdkReady} />} />
+                <Route path="/w/:workspaceId/templates" element={<TemplatesPage workspaces={workspaces} />} />
+                <Route path="/w/:workspaceId/setup" element={
+                    <WorkspaceRouteWrapper workspaces={workspaces}>
+                        {(ws) => <SetupWizard workspace={ws} onUpdateWorkspace={handleUpdateWorkspace} sdkReady={sdkReady} />}
+                    </WorkspaceRouteWrapper>
+                } />
+                <Route path="/w/:workspaceId/reports" element={<CustomReportsPage workspaces={workspaces} />} />
+                <Route path="/w/:workspaceId/team" element={<TeamManagementPage workspaces={workspaces} />} />
+                <Route path="/w/:workspaceId/logs" element={<ActivityLogsPage workspaces={workspaces} />} />
+                <Route path="/w/:workspaceId/ads/:viewLevel/:adId" element={<AdDetailsPage workspaces={workspaces} sdkReady={sdkReady} />} />
 
-    return (
-        <Routes>
-            {/* Public Shared Routes */}
-            <Route path="/s/:shareId" element={<SharedReportPage />} />
-            <Route path="/shared/dashboard/:shareId" element={<SharedWorkspaceDashboard />} />
-
-            {/* Public Login Route */}
-            <Route path="/login" element={
-                isAuthenticated ? <Navigate to="/workspaces" replace /> : <LoginPage onLogin={() => setIsAuthenticated(true)} />
-            } />
-
-            {/* Protected Routes */}
-            <Route path="/" element={<Navigate to="/workspaces" replace />} />
-            
-            <Route path="/workspaces" element={
-                <ProtectedRoute isAuthenticated={isAuthenticated}>
-                    <WorkspacesPage workspaces={workspaces} onCreateWorkspace={handleCreateWorkspace} />
-                </ProtectedRoute>
-            } />
-            
-            <Route path="/integrations" element={
-                <ProtectedRoute isAuthenticated={isAuthenticated}>
-                    <IntegrationsPage />
-                </ProtectedRoute>
-            } />
-            
-            <Route path="/account" element={
-                <ProtectedRoute isAuthenticated={isAuthenticated}>
-                    <AccountSettingsPage workspaces={workspaces} />
-                </ProtectedRoute>
-            } />
-            
-            <Route path="/w/:workspaceId/dashboard" element={
-                <ProtectedRoute isAuthenticated={isAuthenticated}>
-                    <DashboardPage workspaces={workspaces} onUpdateWorkspace={handleUpdateWorkspace} sdkReady={sdkReady} />
-                </ProtectedRoute>
-            } />
-
-            <Route path="/w/:workspaceId/templates" element={
-                <ProtectedRoute isAuthenticated={isAuthenticated}>
-                    <TemplatesPage workspaces={workspaces} />
-                </ProtectedRoute>
-            } />
-            
-            <Route path="/w/:workspaceId/setup" element={
-                <ProtectedRoute isAuthenticated={isAuthenticated}>
-                    <WorkspaceSetupWrapper workspaces={workspaces} onUpdate={handleUpdateWorkspace} sdkReady={sdkReady} />
-                </ProtectedRoute>
-            } />
-            
-            <Route path="/w/:workspaceId/ads/:level/:adId" element={
-                <ProtectedRoute isAuthenticated={isAuthenticated}>
-                    <AdDetailsPage workspaces={workspaces} sdkReady={sdkReady} />
-                </ProtectedRoute>
-            } />
-            
-            <Route path="/w/:workspaceId/logs" element={
-                <ProtectedRoute isAuthenticated={isAuthenticated}>
-                    <ActivityLogsPage workspaces={workspaces} />
-                </ProtectedRoute>
-            } />
-            
-            <Route path="/w/:workspaceId/reports" element={
-                <ProtectedRoute isAuthenticated={isAuthenticated}>
-                    <CustomReportsPage workspaces={workspaces} />
-                </ProtectedRoute>
-            } />
-
-            <Route path="/w/:workspaceId/team" element={
-                <ProtectedRoute isAuthenticated={isAuthenticated}>
-                    <TeamManagementPage workspaces={workspaces} />
-                </ProtectedRoute>
-            } />
-            
-            <Route path="*" element={<Navigate to="/login" replace />} />
-        </Routes>
-    );
+                <Route path="/" element={<Navigate to="/workspaces" />} />
+            </>
+        ) : (
+            <Route path="*" element={<Navigate to="/login" />} />
+        )}
+    </Routes>
+  );
 };
 
 export default App;
