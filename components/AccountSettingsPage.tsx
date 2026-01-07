@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { AppShell } from './Navigation';
 import { SecureKV } from '../utils/kv';
 import type { Workspace, UserProfile } from '../types';
@@ -69,10 +69,10 @@ export const AccountSettingsPage = ({ workspaces }: { workspaces: Workspace[] })
                                 <span className="material-symbols-outlined text-[20px]">credit_card</span>
                                 Cobrança
                             </a>
-                            <a href="/integrations" className="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-500 dark:text-text-secondary hover:bg-gray-100 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-white transition-colors text-sm font-medium">
+                            <Link to="/integrations" className="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-500 dark:text-text-secondary hover:bg-gray-100 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-white transition-colors text-sm font-medium">
                                 <span className="material-symbols-outlined text-[20px]">api</span>
                                 Integrações
-                            </a>
+                            </Link>
                             <a href="#" className="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-500 dark:text-text-secondary hover:bg-gray-100 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-white transition-colors text-sm font-medium">
                                 <span className="material-symbols-outlined text-[20px]">notifications_active</span>
                                 Notificações
