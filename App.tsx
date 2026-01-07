@@ -793,6 +793,12 @@ const App: React.FC = () => {
     }, [workspaces]);
 
     useEffect(() => {
+        // Force HTTPS for Facebook SDK compatibility (except localhost dev environment)
+        if (window.location.protocol === 'http:' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+            window.location.replace(`https://${window.location.host}${window.location.pathname}${window.location.search}`);
+            return;
+        }
+
         const initSDK = async () => {
             const config = await SecureKV.getMetaConfig();
             const appId = config?.appId; 
