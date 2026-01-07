@@ -14,6 +14,7 @@ const AdminMetaSetup: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     const [isTesting, setIsTesting] = useState(false);
     const [consoleLogs, setConsoleLogs] = useState<string[]>([]);
     const [webhookStatus, setWebhookStatus] = useState<'idle' | 'verifying' | 'verified'>('idle');
+    const [testResult, setTestResult] = useState<{ type: 'success' | 'error', message: string } | null>(null);
     const [origin, setOrigin] = useState('');
 
     useEffect(() => {
@@ -44,6 +45,7 @@ const AdminMetaSetup: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
     const runIntegrationTest = async () => {
         setIsTesting(true);
+        setTestResult(null);
         setConsoleLogs([]);
         const logs: string[] = [];
         const pushLog = (l: string) => {
@@ -56,6 +58,7 @@ const AdminMetaSetup: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         
         if (!config.appId || !config.appSecret) {
             pushLog(`<div class="text-red-400 mb-1">> Error: Missing Credentials (App ID or Secret).</div>`);
+            setTestResult({ type: 'error', message: 'Falha: Credenciais ausentes (App ID ou Secret).' });
             setIsTesting(false);
             return;
         }
@@ -72,6 +75,7 @@ const AdminMetaSetup: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         pushLog(`<div class="text-blue-400 ml-4">"message": "Token generated successfully."</div>`);
         pushLog(`<div class="text-blue-400">}</div>`);
         
+        setTestResult({ type: 'success', message: 'Sucesso! Conexão verificada.' });
         setIsTesting(false);
     };
 
@@ -335,16 +339,37 @@ const AdminMetaSetup: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                                 <p className="text-text-secondary text-sm mb-4">
                                     Este teste tentará gerar um token de aplicação temporário para verificar se o ID e o Segredo são válidos e se os servidores do Meta estão acessíveis.
                                 </p>
-                                <button 
-                                    onClick={runIntegrationTest}
-                                    disabled={isTesting}
-                                    className="flex items-center gap-2 bg-white hover:bg-gray-200 disabled:opacity-50 text-background-dark px-5 py-2.5 rounded-lg font-bold transition-colors"
-                                >
-                                    <span className={`material-symbols-outlined text-[20px] ${isTesting ? 'animate-spin' : ''}`}>
-                                        {isTesting ? 'sync' : 'play_arrow'}
-                                    </span>
-                                    {isTesting ? 'Executando...' : 'Executar Teste'}
-                                </button>
+                                
+                                <div className="flex flex-col gap-3">
+                                    <button 
+                                        onClick={runIntegrationTest}
+                                        disabled={isTesting}
+                                        className="flex items-center justify-center gap-2 bg-white hover:bg-gray-200 disabled:opacity-70 disabled:cursor-not-allowed text-background-dark px-5 py-2.5 rounded-lg font-bold transition-all w-fit min-w-[160px]"
+                                    >
+                                        {isTesting ? (
+                                            <svg className="animate-spin size-5 text-background-dark" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                            </svg>
+                                        ) : (
+                                            <span className="material-symbols-outlined text-[20px]">play_arrow</span>
+                                        )}
+                                        {isTesting ? 'Testando...' : 'Executar Teste'}
+                                    </button>
+
+                                    {testResult && (
+                                        <div className={`flex items-center gap-2 p-3 rounded-lg text-sm border animate-in fade-in slide-in-from-top-2 ${
+                                            testResult.type === 'success' 
+                                                ? 'bg-green-500/10 border-green-500/20 text-green-400' 
+                                                : 'bg-red-500/10 border-red-500/20 text-red-400'
+                                        }`}>
+                                            <span className="material-symbols-outlined text-[18px]">
+                                                {testResult.type === 'success' ? 'check_circle' : 'error'}
+                                            </span>
+                                            <span className="font-medium">{testResult.message}</span>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                             <div className="flex-1 w-full">
                                 <div className="rounded-lg bg-[#0f0e17] border border-[#3b3267] p-4 font-mono text-xs overflow-hidden h-[200px] overflow-y-auto">

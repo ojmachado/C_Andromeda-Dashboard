@@ -119,10 +119,12 @@ export const AdDetailsPage = ({ workspaces, sdkReady, isLoading }: { workspaces:
                     if (adRes.creative?.id) {
                         // Fetch Creative Details with extended fields for robustness
                         window.FB.api(`/${adRes.creative.id}`, {
-                            fields: 'name,title,body,image_url,thumbnail_url,object_story_spec,asset_feed_spec,call_to_action_type',
+                            fields: 'name,title,body,image_url,thumbnail_url,object_story_spec,asset_feed_spec,call_to_action_type,video_id',
                             ...apiParams
                         }, (creRes: any) => {
-                            if (!creRes.error) setCreative(creRes);
+                            if (!creRes.error) {
+                                setCreative(creRes);
+                            }
                         });
                     }
                 }
@@ -172,7 +174,7 @@ export const AdDetailsPage = ({ workspaces, sdkReady, isLoading }: { workspaces:
 
     // Robust Creative Data Extraction
     const creativeInfo = useMemo(() => {
-        if (!creative) return { title: '', body: '', image: '', domain: '', type: 'IMAGE' };
+        if (!creative) return { title: '', body: '', image: '', domain: '', type: 'IMAGE', cta: 'Saiba Mais' };
 
         const spec = creative.object_story_spec;
         const assetFeed = creative.asset_feed_spec; // Dynamic Ads
@@ -227,12 +229,17 @@ export const AdDetailsPage = ({ workspaces, sdkReady, isLoading }: { workspaces:
 
         // Domain extraction
         let domain = 'LINK';
-        const link = extract(spec, 'link_data.link') || extract(assetFeed, 'link_urls.0.website_url');
+        const link = extract(spec, 'link_data.link') || extract(assetFeed, 'link_urls.0.website_url') || extract(spec, 'video_data.call_to_action.value.link');
         if (link) {
             try { domain = new URL(link).hostname.replace('www.', '').toUpperCase(); } catch {}
         }
 
-        return { title, body, image, domain, type };
+        // CTA
+        const cta = creative.call_to_action_type 
+            ? creative.call_to_action_type.replace(/_/g, ' ') 
+            : extract(spec, 'link_data.call_to_action.type') || 'SAIBA MAIS';
+
+        return { title, body, image, domain, type, cta };
     }, [creative]);
 
     // Derived Links
@@ -485,7 +492,7 @@ export const AdDetailsPage = ({ workspaces, sdkReady, isLoading }: { workspaces:
                                 </div>
                                 
                                 {/* Image Container - Aspect Ratio Fix */}
-                                <div className="w-full relative mt-2 bg-gray-100 dark:bg-black/20 border-y border-gray-100 dark:border-[#292348]/50 min-h-[250px] flex items-center justify-center overflow-hidden">
+                                <div className="w-full relative mt-2 bg-gray-100 dark:bg-black/20 border-y border-gray-100 dark:border-[#292348]/50 min-h-[300px] flex items-center justify-center overflow-hidden">
                                     {creativeInfo.image ? (
                                         <>
                                             <img 
@@ -493,12 +500,13 @@ export const AdDetailsPage = ({ workspaces, sdkReady, isLoading }: { workspaces:
                                                 alt="Ad Creative" 
                                                 className="w-full h-auto max-h-[600px] object-contain relative z-10"
                                                 loading="lazy"
+                                                referrerPolicy="no-referrer"
                                             />
                                             
                                             {/* Video Play Button Overlay */}
                                             {creativeInfo.type === 'VIDEO' && (
-                                                <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/20 group-hover:bg-black/10 transition-colors">
-                                                    <div className="w-16 h-16 bg-white/90 rounded-full flex items-center justify-center shadow-lg backdrop-blur-sm cursor-pointer hover:scale-105 transition-transform">
+                                                <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/20 group-hover:bg-black/10 transition-colors pointer-events-none">
+                                                    <div className="w-16 h-16 bg-white/90 rounded-full flex items-center justify-center shadow-lg backdrop-blur-sm">
                                                         <span className="material-symbols-outlined text-4xl text-black ml-1">play_arrow</span>
                                                     </div>
                                                 </div>
@@ -508,16 +516,15 @@ export const AdDetailsPage = ({ workspaces, sdkReady, isLoading }: { workspaces:
                                             {creativeInfo.type === 'CAROUSEL' && (
                                                 <>
                                                     <div className="absolute inset-0 z-20 pointer-events-none flex items-center justify-between px-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                        <div className="w-8 h-8 rounded-full bg-black/50 flex items-center justify-center text-white backdrop-blur-sm">
+                                                        <div className="w-8 h-8 rounded-full bg-black/50 flex items-center justify-center text-white backdrop-blur-sm cursor-pointer pointer-events-auto">
                                                             <span className="material-symbols-outlined text-sm">chevron_left</span>
                                                         </div>
-                                                        <div className="w-8 h-8 rounded-full bg-black/50 flex items-center justify-center text-white backdrop-blur-sm">
+                                                        <div className="w-8 h-8 rounded-full bg-black/50 flex items-center justify-center text-white backdrop-blur-sm cursor-pointer pointer-events-auto">
                                                             <span className="material-symbols-outlined text-sm">chevron_right</span>
                                                         </div>
                                                     </div>
                                                     <div className="absolute bottom-4 left-0 right-0 z-20 flex justify-center gap-1.5 pointer-events-none">
                                                         <div className="w-2 h-2 rounded-full bg-primary shadow-sm border border-white/20"></div>
-                                                        <div className="w-1.5 h-1.5 rounded-full bg-white/60 shadow-sm backdrop-blur-md"></div>
                                                         <div className="w-1.5 h-1.5 rounded-full bg-white/60 shadow-sm backdrop-blur-md"></div>
                                                         <div className="w-1.5 h-1.5 rounded-full bg-white/60 shadow-sm backdrop-blur-md"></div>
                                                     </div>
@@ -526,22 +533,22 @@ export const AdDetailsPage = ({ workspaces, sdkReady, isLoading }: { workspaces:
                                         </>
                                     ) : (
                                         <div className="flex flex-col items-center justify-center text-text-secondary py-12">
-                                            <span className="material-symbols-outlined text-4xl mb-2">image_not_supported</span>
+                                            <span className="material-symbols-outlined text-4xl mb-2 opacity-50">image_not_supported</span>
                                             <span className="text-xs">Preview indisponível</span>
                                         </div>
                                     )}
                                 </div>
 
-                                <div className="bg-gray-100 dark:bg-[#25213a] p-3 flex justify-between items-center">
+                                <div className="bg-gray-100 dark:bg-[#25213a] p-3 flex justify-between items-center min-h-[60px]">
                                     <div className="overflow-hidden mr-2 flex-1">
                                         <p className="text-[10px] font-semibold text-slate-500 dark:text-text-secondary truncate uppercase tracking-wider mb-0.5">{creativeInfo.domain}</p>
                                         <p className="text-sm font-bold text-slate-900 dark:text-white line-clamp-2 leading-snug">{creativeInfo.title || 'Headline'}</p>
                                     </div>
-                                    <button className="shrink-0 bg-gray-300 dark:bg-[#383355] hover:bg-gray-400 dark:hover:bg-[#454066] text-slate-900 dark:text-white text-[10px] font-bold py-2 px-3 rounded border border-gray-300 dark:border-transparent transition-colors uppercase whitespace-nowrap">
-                                        {creative?.call_to_action_type?.replace(/_/g, ' ') || 'Saiba Mais'}
+                                    <button className="shrink-0 bg-gray-200 dark:bg-[#383355] hover:bg-gray-300 dark:hover:bg-[#454066] text-slate-800 dark:text-white text-[10px] font-bold py-2 px-4 rounded border border-gray-300 dark:border-transparent transition-colors uppercase whitespace-nowrap">
+                                        {creativeInfo.cta}
                                     </button>
                                 </div>
-                                <div className="p-3 flex items-center justify-between text-slate-500 dark:text-text-secondary border-t border-gray-200 dark:border-[#292348]/50 text-[10px] font-mono">
+                                <div className="p-2 flex items-center justify-between text-slate-500 dark:text-text-secondary/50 border-t border-gray-200 dark:border-[#292348]/50 text-[9px] font-mono bg-gray-50 dark:bg-[#1c192b]">
                                      <span>ID: {adId}</span>
                                 </div>
                             </div>
