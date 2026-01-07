@@ -167,10 +167,10 @@ export const DataTable: React.FC<{ data: InsightData[]; isLoading?: boolean }> =
   const headers: { key: SortKey; label: string }[] = [
       { key: 'name', label: 'Nome' },
       { key: 'status', label: 'Status' },
-      { key: 'adPreviewLink', label: 'Link do Anúncio' },
+      { key: 'messages', label: 'Mensagens' }, 
+      { key: 'costPerConversation', label: 'Custo/Msg' },
+      { key: 'adPreviewLink', label: 'Ver Anúncio' },
       { key: 'spend', label: 'Investimento' },
-      { key: 'messages', label: 'Msgs' }, // Nova Coluna
-      { key: 'costPerConversation', label: 'Custo/Msg' }, // Nova Coluna
       { key: 'impressions', label: 'Impr.' },
       { key: 'clicks', label: 'Clicks' },
       { key: 'ctr', label: 'CTR' },
@@ -188,7 +188,7 @@ export const DataTable: React.FC<{ data: InsightData[]; isLoading?: boolean }> =
               <th 
                 key={h.key} 
                 onClick={() => h.key !== 'adPreviewLink' && requestSort(h.key)}
-                className={`px-6 py-4 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest ${h.key !== 'adPreviewLink' ? 'cursor-pointer hover:text-primary' : ''} transition-colors select-none group`}
+                className={`px-6 py-4 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest ${h.key !== 'adPreviewLink' ? 'cursor-pointer hover:text-primary' : ''} transition-colors select-none group whitespace-nowrap`}
               >
                 <div className="flex items-center">
                     {h.label}
@@ -210,11 +210,11 @@ export const DataTable: React.FC<{ data: InsightData[]; isLoading?: boolean }> =
              ))
           ) : sortedData.length === 0 ? (
             <tr>
-              <td colSpan={12} className="px-6 py-10 text-center text-slate-400">Nenhum dado para exibir neste período.</td>
+              <td colSpan={12} className="px-6 py-10 text-center text-slate-400">Nenhum item com veiculação no período selecionado.</td>
             </tr>
           ) : (
             sortedData.map((row, i) => (
-              <tr key={i} className="border-b border-slate-100 dark:border-white/5 last:border-0 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
+              <tr key={i} className="border-b border-slate-100 dark:border-white/5 last:border-0 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors group">
                 <td className="px-6 py-4 text-sm font-semibold truncate max-w-[220px]" title={row.name}>
                     {/* Link para detalhes em nova aba */}
                     {row.detailsLink ? (
@@ -222,45 +222,60 @@ export const DataTable: React.FC<{ data: InsightData[]; isLoading?: boolean }> =
                             href={row.detailsLink} 
                             target="_blank" 
                             rel="noopener noreferrer"
-                            className="text-white hover:text-primary hover:underline decoration-dashed underline-offset-4 transition-all"
+                            className="text-slate-700 dark:text-white hover:text-primary hover:underline decoration-dashed underline-offset-4 transition-all"
                         >
                             {row.name}
                         </a>
                     ) : (
                         <span className="text-slate-700 dark:text-white">{row.name}</span>
                     )}
-                    {row.objective && <div className="text-[9px] font-mono text-text-secondary mt-1">{row.objective}</div>}
+                    {row.objective && <div className="text-[9px] font-mono text-text-secondary mt-1 opacity-70">{row.objective.replace('OUTCOME_', '')}</div>}
                 </td>
                 <td className="px-6 py-4">
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${row.status === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-slate-500/10 text-slate-400 border-slate-500/20'}`}>
                         {row.status || 'UNKNOWN'}
                     </span>
                 </td>
+                
+                {/* Mensagens */}
+                <td className="px-6 py-4 text-sm font-bold text-slate-700 dark:text-white">
+                  {row.messages > 0 ? (
+                      <div className="flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[14px] text-primary">chat</span>
+                          {row.messages.toLocaleString()}
+                      </div>
+                  ) : <span className="text-slate-500 opacity-50">-</span>}
+                </td>
+                
+                {/* Custo Por Mensagem */}
+                <td className="px-6 py-4 text-sm font-mono font-medium">
+                  {row.messages > 0 ? (
+                      <span className={row.costPerConversation < 5 ? 'text-emerald-400' : row.costPerConversation < 15 ? 'text-amber-400' : 'text-rose-400'}>
+                         {row.costPerConversation.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      </span>
+                  ) : <span className="text-slate-500 opacity-50">-</span>}
+                </td>
+
+                {/* Link do Anúncio */}
                 <td className="px-6 py-4">
                     {row.adPreviewLink ? (
                         <a 
                             href={row.adPreviewLink} 
                             target="_blank" 
                             rel="noopener noreferrer" 
-                            className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 hover:bg-primary hover:text-white text-text-secondary transition-colors"
-                            title="Ver Anúncio"
+                            className="flex items-center gap-1 text-xs font-bold text-blue-400 hover:text-white hover:underline transition-colors bg-blue-500/10 px-2 py-1 rounded border border-blue-500/20 w-fit"
+                            title="Visualizar Anúncio no Facebook/Instagram"
                         >
-                            <span className="material-symbols-outlined text-lg">open_in_new</span>
+                            <span className="material-symbols-outlined text-[14px]">public</span>
+                            Ver
                         </a>
                     ) : (
-                        <span className="text-xs text-text-secondary opacity-50">N/A</span>
+                        <span className="text-xs text-text-secondary opacity-30">N/A</span>
                     )}
                 </td>
+
                 <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300 font-mono font-medium">
                   {row.spend.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                </td>
-                
-                {/* Novas Colunas */}
-                <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300 font-bold">
-                  {row.messages > 0 ? row.messages.toLocaleString() : '-'}
-                </td>
-                <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300 font-mono text-emerald-400">
-                  {row.costPerConversation > 0 ? row.costPerConversation.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-'}
                 </td>
                 
                 <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">{row.impressions.toLocaleString()}</td>

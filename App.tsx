@@ -105,11 +105,15 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
                      { action_type: 'onsite_conversion.messaging_conversation_started_7d', value: 45 }
                  ]
              });
-             setCampaigns([
-                 { id: 'c1', name: '[LRM][TRAFEGO][PERFIL][CBO][NATAL]', status: 'ACTIVE', objective: 'OUTCOME_TRAFFIC', spend: 749.73, impressions: 52569, clicks: 800, ctr: 2.90, cpm: 14.0, cpc: 0.49, roas: 4.2, cpa: 12.50, messages: 32, costPerConversation: 23.42 },
+             const demoItems = [
+                 { id: 'c1', name: '[LRM][TRAFEGO][PERFIL][CBO][NATAL]', status: 'ACTIVE', objective: 'OUTCOME_TRAFFIC', spend: 749.73, impressions: 52569, clicks: 800, ctr: 2.90, cpm: 14.0, cpc: 0.49, roas: 4.2, cpa: 12.50, messages: 32, costPerConversation: 23.42, adPreviewLink: 'https://facebook.com' },
                  { id: 'c2', name: '[INSTITUCIONAL][BRANDING][2024]', status: 'PAUSED', objective: 'OUTCOME_AWARENESS', spend: 299.23, impressions: 20569, clicks: 440, ctr: 2.1, cpm: 14.5, cpc: 0.68, roas: 1.5, cpa: 45.00, messages: 13, costPerConversation: 23.01 },
-                 { id: 'c3', name: '[CONVERSAO][LAL 1%][COMPRADORES]', status: 'ACTIVE', objective: 'OUTCOME_SALES', adPreviewLink: 'https://facebook.com', spend: 500.00, impressions: 9500, clicks: 200, ctr: 2.1, cpm: 52.6, cpc: 2.50, roas: 5.5, cpa: 25.00, messages: 5, costPerConversation: 100 }
-             ].map(c => ({...c, detailsLink: `#/w/${workspaceId}/ads/${viewLevel}/${c.id}`})));
+                 { id: 'c3', name: '[CONVERSAO][LAL 1%][COMPRADORES]', status: 'ACTIVE', objective: 'OUTCOME_SALES', adPreviewLink: 'https://facebook.com', spend: 500.00, impressions: 9500, clicks: 200, ctr: 2.1, cpm: 52.6, cpc: 2.50, roas: 5.5, cpa: 25.00, messages: 5, costPerConversation: 100 },
+                 { id: 'c4', name: '[TESTE][SEM ENTREGA]', status: 'PAUSED', objective: 'OUTCOME_TRAFFIC', spend: 0, impressions: 0, clicks: 0, ctr: 0, cpm: 0, cpc: 0, roas: 0, cpa: 0, messages: 0, costPerConversation: 0 }
+             ].map(c => ({...c, detailsLink: `#/w/${workspaceId}/ads/${viewLevel}/${c.id}`}));
+             
+             // Filter Demo Data (Impressions > 0)
+             setCampaigns(demoItems.filter(i => i.impressions > 0));
              
              // Mock Trend Data
              const trend = Array.from({length: 15}, (_, i) => ({
@@ -139,8 +143,8 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
       // Dynamic fields based on view level
       let listFields = 'id,name,status';
       if (viewLevel === 'campaign') listFields += ',objective';
-      if (viewLevel === 'adset' || viewLevel === 'ad') listFields += ',campaign{objective}';
-      if (viewLevel === 'ad') listFields += ',preview_shareable_link'; 
+      if (viewLevel === 'adset') listFields += ',campaign{objective,name}'; // Added campaign name for context
+      if (viewLevel === 'ad') listFields += ',campaign{objective,name},preview_shareable_link'; // Needed for Ad Links
 
       const p2 = new Promise<any>((resolve) => {
           window.FB.api(`/${accountId}/${levelPath}`, { 
@@ -194,6 +198,8 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
           const formatted = listRes.data.map((c: any) => {
               const i: APIGeneralInsights = c.insights?.data?.[0] || {};
               const spend = parseFloat(i.spend || '0');
+              const impressions = parseInt(i.impressions || '0');
+              
               const purchaseAction = i.actions?.find(a => a.action_type === 'purchase' || a.action_type === 'offsite_conversion.fb_pixel_purchase');
               const purchases = purchaseAction ? parseFloat(purchaseAction.value) : 0;
               const roasVal = i.purchase_roas?.[0]?.value ? parseFloat(i.purchase_roas[0].value) : 0;
@@ -215,7 +221,7 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
                   adPreviewLink: c.preview_shareable_link || undefined,
                   detailsLink: `#/w/${workspaceId}/ads/${viewLevel}/${c.id}`, // Build Hash Link
                   spend,
-                  impressions: parseInt(i.impressions || '0'),
+                  impressions,
                   clicks: parseInt(i.clicks || '0'),
                   ctr: parseFloat(i.ctr || '0'),
                   cpm: parseFloat(i.cpm || '0'),
@@ -226,7 +232,10 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
                   costPerConversation
               };
           });
-          setCampaigns(formatted);
+          
+          // Filter out items with 0 impressions (No Delivery)
+          const filteredByDelivery = formatted.filter((item: InsightData) => item.impressions > 0);
+          setCampaigns(filteredByDelivery);
       }
 
       // Process Trend
