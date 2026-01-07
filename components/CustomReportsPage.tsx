@@ -1,18 +1,275 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { AppShell } from './Navigation';
 import { Button, Card, Badge } from './UI';
 import { SecureKV } from '../utils/kv';
 import type { Workspace, CustomReport } from '../types';
 
+// --- Helper: Mock Data Generator based on Config ---
+const generateReportData = (config: CustomReport['config'], type: CustomReport['type']) => {
+    const { dimension, metrics } = config;
+    const isTimeSeries = dimension === 'Dia' || dimension === 'Mês';
+    const count = isTimeSeries ? 15 : 6; // 15 days or 6 categories
+    
+    const categories = isTimeSeries 
+        ? Array.from({length: count}, (_, i) => {
+            const d = new Date();
+            d.setDate(d.getDate() - (count - i));
+            return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+        })
+        : ['Campanha Institucional', 'Retargeting Black Friday', 'Topo de Funil - Vídeo', 'Catálogo de Vendas', 'Leads - Ebook', 'Promoção Relâmpago'];
+
+    return categories.map(cat => {
+        const row: any = { label: cat };
+        metrics.forEach(metric => {
+            let val = 0;
+            if (metric.includes('Spend') || metric.includes('Cost')) val = Math.random() * 500 + 100;
+            else if (metric.includes('CTR') || metric.includes('Rate')) val = Math.random() * 2 + 0.5;
+            else if (metric.includes('Impressions')) val = Math.floor(Math.random() * 50000 + 10000);
+            else if (metric.includes('ROAS')) val = Math.random() * 5 + 1;
+            else val = Math.floor(Math.random() * 200 + 20); // Clicks, Conversions
+            
+            row[metric] = val;
+        });
+        return row;
+    });
+};
+
+// --- Report Viewer Component ---
+const ReportViewer: React.FC<{ report: CustomReport; onClose: () => void; onEdit: () => void }> = ({ report, onClose, onEdit }) => {
+    const data = useMemo(() => generateReportData(report.config, report.type), [report]);
+    const primaryMetric = report.config.metrics[0];
+
+    // Calculate Totals for Header
+    const totalPrimary = data.reduce((acc, curr) => acc + (curr[primaryMetric] || 0), 0);
+    const formattedTotal = primaryMetric.includes('Spend') || primaryMetric.includes('Cost') 
+        ? totalPrimary.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+        : primaryMetric.includes('ROAS') || primaryMetric.includes('CTR')
+        ? (totalPrimary / data.length).toFixed(2) + (primaryMetric.includes('CTR') ? '%' : 'x')
+        : Math.floor(totalPrimary).toLocaleString();
+
+    return (
+        <div className="flex flex-col h-full bg-background-light dark:bg-background-dark overflow-y-auto">
+            {/* Viewer Header */}
+            <div className="bg-white dark:bg-card-dark border-b border-gray-200 dark:border-border-dark px-6 py-4 sticky top-0 z-10">
+                <div className="max-w-[1400px] mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div className="flex items-center gap-4">
+                        <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-white/5 text-gray-500 dark:text-text-secondary transition-colors">
+                            <span className="material-symbols-outlined">arrow_back</span>
+                        </button>
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{report.name}</h1>
+                                <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-primary/10 text-primary border border-primary/20">
+                                    {report.type}
+                                </span>
+                            </div>
+                            <p className="text-sm text-gray-500 dark:text-text-secondary mt-0.5">
+                                Criado por {report.author} • Editado em {report.lastEdited}
+                            </p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <div className="hidden md:flex items-center px-3 py-1.5 bg-gray-100 dark:bg-white/5 rounded-lg border border-gray-200 dark:border-border-dark mr-2">
+                            <span className="material-symbols-outlined text-gray-500 text-sm mr-2">calendar_today</span>
+                            <span className="text-sm font-medium text-gray-700 dark:text-white">Últimos 30 dias</span>
+                        </div>
+                        <Button variant="secondary" onClick={onEdit}>
+                            <span className="material-symbols-outlined text-sm">edit</span> Editar
+                        </Button>
+                        <Button onClick={() => window.print()}>
+                            <span className="material-symbols-outlined text-sm">download</span> Exportar
+                        </Button>
+                    </div>
+                </div>
+            </div>
+
+            {/* Viewer Content */}
+            <div className="flex-1 p-6 max-w-[1400px] mx-auto w-full">
+                {/* Summary Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    {report.config.metrics.slice(0, 3).map((metric, idx) => {
+                        const total = data.reduce((acc, curr) => acc + (curr[metric] || 0), 0);
+                        const val = metric.includes('Spend') || metric.includes('Cost') 
+                            ? total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+                            : metric.includes('ROAS') || metric.includes('CTR')
+                            ? (total / data.length).toFixed(2) + (metric.includes('CTR') ? '%' : 'x')
+                            : Math.floor(total).toLocaleString();
+
+                        return (
+                            <Card key={idx} className="p-5 flex items-center justify-between">
+                                <div>
+                                    <p className="text-xs font-bold text-gray-500 dark:text-text-secondary uppercase tracking-wider mb-1">{metric}</p>
+                                    <p className="text-2xl font-black text-gray-900 dark:text-white">{val}</p>
+                                </div>
+                                <div className={`p-3 rounded-xl ${idx === 0 ? 'bg-primary/10 text-primary' : 'bg-gray-100 dark:bg-white/5 text-gray-500'}`}>
+                                    <span className="material-symbols-outlined">
+                                        {metric.includes('Spend') ? 'payments' : metric.includes('Impressions') ? 'visibility' : 'analytics'}
+                                    </span>
+                                </div>
+                            </Card>
+                        );
+                    })}
+                </div>
+
+                {/* Main Visualization */}
+                <Card className="p-6 min-h-[500px] flex flex-col">
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-6">Análise Detalhada</h3>
+                    <div className="flex-1 w-full h-full relative flex items-center justify-center">
+                        
+                        {/* BAR CHART RENDERER */}
+                        {report.type === 'bar' && (
+                            <div className="w-full h-full flex items-end justify-between gap-4 px-4 min-h-[400px]">
+                                {data.map((row: any, i: number) => {
+                                    const val = row[primaryMetric];
+                                    const max = Math.max(...data.map((r: any) => r[primaryMetric]));
+                                    const height = (val / max) * 100;
+                                    
+                                    return (
+                                        <div key={i} className="flex-1 flex flex-col justify-end h-full group relative">
+                                            <div className="w-full bg-primary/20 dark:bg-primary/30 rounded-t-md hover:bg-primary transition-all relative" style={{ height: `${height}%` }}>
+                                                <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-20">
+                                                    {primaryMetric}: {val.toFixed(2)}
+                                                </div>
+                                            </div>
+                                            <div className="mt-2 text-[10px] text-gray-500 dark:text-text-secondary text-center truncate w-full" title={row.label}>
+                                                {row.label}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+
+                        {/* LINE CHART RENDERER */}
+                        {report.type === 'line' && (
+                            <div className="w-full h-full min-h-[400px] relative">
+                                <svg className="w-full h-full overflow-visible" viewBox="0 0 1000 400" preserveAspectRatio="none">
+                                    <defs>
+                                        <linearGradient id="viewGrad" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="0%" stopColor="#3713ec" stopOpacity="0.5" />
+                                            <stop offset="100%" stopColor="#3713ec" stopOpacity="0" />
+                                        </linearGradient>
+                                    </defs>
+                                    {(() => {
+                                        const max = Math.max(...data.map((r: any) => r[primaryMetric]));
+                                        const points = data.map((r: any, i: number) => {
+                                            const x = (i / (data.length - 1)) * 1000;
+                                            const y = 400 - (r[primaryMetric] / max) * 380; // 20px padding
+                                            return `${x},${y}`;
+                                        }).join(' ');
+                                        
+                                        return (
+                                            <>
+                                                {/* Grid Lines */}
+                                                {[0, 100, 200, 300, 400].map(y => (
+                                                    <line key={y} x1="0" y1={y} x2="1000" y2={y} stroke="currentColor" className="text-gray-200 dark:text-gray-800" strokeWidth="1" />
+                                                ))}
+                                                
+                                                {/* Area */}
+                                                <polygon points={`${points} 1000,400 0,400`} fill="url(#viewGrad)" />
+                                                
+                                                {/* Line */}
+                                                <polyline points={points} fill="none" stroke="#3713ec" strokeWidth="3" vectorEffect="non-scaling-stroke" />
+                                                
+                                                {/* Points */}
+                                                {data.map((r: any, i: number) => {
+                                                    const x = (i / (data.length - 1)) * 1000;
+                                                    const y = 400 - (r[primaryMetric] / max) * 380;
+                                                    return (
+                                                        <g key={i} className="group cursor-pointer">
+                                                            <circle cx={x} cy={y} r="4" className="fill-white dark:fill-background-dark stroke-primary stroke-2 hover:scale-150 transition-transform" />
+                                                            <foreignObject x={x - 50} y={y - 40} width="100" height="40" className="opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                                                                <div className="bg-gray-900 text-white text-[10px] p-1 rounded text-center shadow-lg">
+                                                                    {r.label}<br/>{r[primaryMetric].toFixed(2)}
+                                                                </div>
+                                                            </foreignObject>
+                                                        </g>
+                                                    );
+                                                })}
+                                            </>
+                                        );
+                                    })()}
+                                </svg>
+                                <div className="flex justify-between mt-4 text-xs text-gray-500 font-mono uppercase">
+                                    <span>{data[0].label}</span>
+                                    <span>{data[data.length-1].label}</span>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* TABLE RENDERER */}
+                        {report.type === 'table' && (
+                            <div className="w-full h-full overflow-auto min-h-[400px]">
+                                <table className="w-full text-left border-collapse">
+                                    <thead>
+                                        <tr className="border-b border-gray-200 dark:border-border-dark bg-gray-50 dark:bg-white/5">
+                                            <th className="p-4 text-xs font-bold text-gray-500 dark:text-text-secondary uppercase tracking-wider">{report.config.dimension}</th>
+                                            {report.config.metrics.map(m => (
+                                                <th key={m} className="p-4 text-xs font-bold text-gray-500 dark:text-text-secondary uppercase tracking-wider text-right">{m}</th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100 dark:divide-border-dark">
+                                        {data.map((row: any, i: number) => (
+                                            <tr key={i} className="hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
+                                                <td className="p-4 text-sm font-medium text-gray-900 dark:text-white">{row.label}</td>
+                                                {report.config.metrics.map(m => (
+                                                    <td key={m} className="p-4 text-sm text-gray-600 dark:text-gray-300 text-right font-mono">
+                                                        {m.includes('Spend') ? row[m].toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : row[m].toFixed(2)}
+                                                    </td>
+                                                ))}
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+
+                        {/* PIE CHART RENDERER */}
+                        {report.type === 'pie' && (
+                            <div className="flex flex-col items-center justify-center w-full min-h-[400px]">
+                                <div className="relative w-72 h-72">
+                                    <svg viewBox="0 0 32 32" className="w-full h-full transform -rotate-90">
+                                        <circle r="16" cx="16" cy="16" fill="transparent" stroke="#3713ec" strokeWidth="32" strokeDasharray="60 100" />
+                                        <circle r="16" cx="16" cy="16" fill="transparent" stroke="#10b981" strokeWidth="32" strokeDasharray="25 100" strokeDashoffset="-60" />
+                                        <circle r="16" cx="16" cy="16" fill="transparent" stroke="#f59e0b" strokeWidth="32" strokeDasharray="15 100" strokeDashoffset="-85" />
+                                    </svg>
+                                    <div className="absolute inset-0 flex items-center justify-center">
+                                        <span className="text-xl font-bold text-white drop-shadow-md">Total</span>
+                                    </div>
+                                </div>
+                                <div className="mt-8 flex flex-wrap justify-center gap-6">
+                                    {data.slice(0,3).map((d: any, i: number) => (
+                                        <div key={i} className="flex items-center gap-2">
+                                            <div className={`w-3 h-3 rounded-full ${i===0 ? 'bg-primary' : i===1 ? 'bg-emerald-500' : 'bg-amber-500'}`}></div>
+                                            <div className="text-sm">
+                                                <span className="text-gray-900 dark:text-white font-medium">{d.label}</span>
+                                                <span className="text-gray-500 dark:text-text-secondary ml-1">
+                                                    ({((d[primaryMetric] / totalPrimary) * 100).toFixed(1)}%)
+                                                </span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </Card>
+            </div>
+        </div>
+    );
+};
+
 export const CustomReportsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
     const { workspaceId } = useParams();
-    const [viewMode, setViewMode] = useState<'list' | 'builder'>('list');
+    const [viewMode, setViewMode] = useState<'list' | 'builder' | 'view'>('list');
     const [reports, setReports] = useState<CustomReport[]>([]);
     
     // Builder State
     const [currentReportId, setCurrentReportId] = useState<string | null>(null);
+    const [currentViewReport, setCurrentViewReport] = useState<CustomReport | null>(null);
     const [reportName, setReportName] = useState('Novo Relatório Sem Título');
     const [selectedMetrics, setSelectedMetrics] = useState<string[]>(['Spend Amount', 'Impressions']);
     const [selectedDimension, setSelectedDimension] = useState('Nome da Campanha');
@@ -44,6 +301,11 @@ export const CustomReportsPage = ({ workspaces }: { workspaces: Workspace[] }) =
         setVizType(report.type);
         setHasUnsavedChanges(false);
         setViewMode('builder');
+    };
+
+    const handleViewReport = (report: CustomReport) => {
+        setCurrentViewReport(report);
+        setViewMode('view');
     };
 
     const handleDeleteReport = (id: string, e: React.MouseEvent) => {
@@ -97,6 +359,20 @@ export const CustomReportsPage = ({ workspaces }: { workspaces: Workspace[] }) =
         );
         setHasUnsavedChanges(true);
     };
+
+    // --- MAIN RENDER ---
+    
+    if (viewMode === 'view' && currentViewReport) {
+        return (
+            <AppShell workspaces={workspaces} activeWorkspaceId={workspaceId}>
+                <ReportViewer 
+                    report={currentViewReport} 
+                    onClose={() => setViewMode('list')}
+                    onEdit={() => handleEditReport(currentViewReport)}
+                />
+            </AppShell>
+        );
+    }
 
     return (
         <AppShell workspaces={workspaces} activeWorkspaceId={workspaceId}>
@@ -154,7 +430,7 @@ export const CustomReportsPage = ({ workspaces }: { workspaces: Workspace[] }) =
                                         </tr>
                                     ) : (
                                         reports.map((report) => (
-                                            <tr key={report.id} className="group hover:bg-white/5 transition-colors cursor-pointer" onClick={() => handleEditReport(report)}>
+                                            <tr key={report.id} className="group hover:bg-white/5 transition-colors cursor-pointer" onClick={() => handleViewReport(report)}>
                                                 <td className="px-6 py-4">
                                                     <div className="flex items-center gap-3">
                                                         <div className={`p-2 rounded ${
@@ -189,14 +465,18 @@ export const CustomReportsPage = ({ workspaces }: { workspaces: Workspace[] }) =
                                                 <td className="px-6 py-4 text-right">
                                                     <div className="flex items-center justify-end gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
                                                         <button 
+                                                            onClick={(e) => { e.stopPropagation(); handleViewReport(report); }}
+                                                            className="p-1.5 rounded-md hover:bg-white/10 text-text-secondary hover:text-white transition-colors" 
+                                                            title="Visualizar"
+                                                        >
+                                                            <span className="material-symbols-outlined text-[18px]">visibility</span>
+                                                        </button>
+                                                        <button 
                                                             onClick={(e) => { e.stopPropagation(); handleEditReport(report); }}
                                                             className="p-1.5 rounded-md hover:bg-white/10 text-text-secondary hover:text-white transition-colors" 
                                                             title="Editar"
                                                         >
                                                             <span className="material-symbols-outlined text-[18px]">edit</span>
-                                                        </button>
-                                                        <button className="p-1.5 rounded-md hover:bg-white/10 text-text-secondary hover:text-white transition-colors" title="Duplicar">
-                                                            <span className="material-symbols-outlined text-[18px]">content_copy</span>
                                                         </button>
                                                         <div className="w-px h-4 bg-border-dark mx-1"></div>
                                                         <button 
@@ -351,7 +631,7 @@ export const CustomReportsPage = ({ workspaces }: { workspaces: Workspace[] }) =
                             </div>
                         </div>
 
-                        {/* Canvas */}
+                        {/* Canvas - Use ReportViewer Logic but simpler for builder preview */}
                         <div className="flex-1 p-8 overflow-y-auto bg-background-dark flex flex-col">
                             <div className="w-full h-full max-h-[600px] rounded-xl border border-dashed border-border-dark bg-white/5 flex flex-col relative group overflow-hidden">
                                 {/* Chart Header */}
@@ -370,21 +650,13 @@ export const CustomReportsPage = ({ workspaces }: { workspaces: Workspace[] }) =
                                     </div>
                                 </div>
 
-                                {/* Dynamic Visual Representation */}
+                                {/* Dynamic Visual Representation (Simplified for Builder) */}
                                 <div className="flex-1 p-8 relative flex items-center justify-center">
                                     {vizType === 'bar' && (
                                         <div className="flex-1 w-full h-full flex items-end justify-between gap-4 relative px-4">
-                                            {/* Fake Grid */}
-                                            <div className="absolute inset-x-0 inset-y-0 flex flex-col justify-between pointer-events-none opacity-10 z-0">
-                                                {[1,2,3,4,5].map(i => <div key={i} className="w-full h-px bg-text-secondary"></div>)}
-                                            </div>
-                                            {/* Bars */}
                                             {[40, 65, 30, 50, 85, 45, 60].map((h, i) => (
                                                 <div key={i} className="flex-1 flex flex-col justify-end h-full z-10 group/bar cursor-pointer">
                                                     <div className="w-full bg-primary/20 group-hover/bar:bg-primary transition-all rounded-t-sm relative" style={{ height: `${h}%` }}>
-                                                        <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-black/80 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover/bar:opacity-100 transition-opacity">
-                                                            {h * 1234}
-                                                        </div>
                                                     </div>
                                                 </div>
                                             ))}
@@ -402,9 +674,6 @@ export const CustomReportsPage = ({ workspaces }: { workspaces: Workspace[] }) =
                                                         <stop offset="100%" stopColor="#3713ec" stopOpacity="0" />
                                                     </linearGradient>
                                                 </defs>
-                                                {[0,20,40,60,80,100].map(x => (
-                                                    <circle key={x} cx={x} cy={Math.random() * 80 + 10} r="1.5" fill="#fff" />
-                                                ))}
                                             </svg>
                                         </div>
                                     )}
@@ -414,12 +683,7 @@ export const CustomReportsPage = ({ workspaces }: { workspaces: Workspace[] }) =
                                             <svg viewBox="0 0 32 32" className="w-full h-full transform -rotate-90">
                                                 <circle r="16" cx="16" cy="16" fill="transparent" stroke="#3713ec" strokeWidth="32" strokeDasharray="40 100" />
                                                 <circle r="16" cx="16" cy="16" fill="transparent" stroke="#10b981" strokeWidth="32" strokeDasharray="30 100" strokeDashoffset="-40" />
-                                                <circle r="16" cx="16" cy="16" fill="transparent" stroke="#f59e0b" strokeWidth="32" strokeDasharray="30 100" strokeDashoffset="-70" />
                                             </svg>
-                                            <div className="absolute inset-0 flex items-center justify-center flex-col">
-                                                <span className="text-2xl font-bold text-white">Total</span>
-                                                <span className="text-sm text-text-secondary">Distribution</span>
-                                            </div>
                                         </div>
                                     )}
 
@@ -444,17 +708,6 @@ export const CustomReportsPage = ({ workspaces }: { workspaces: Workspace[] }) =
                                         </div>
                                     )}
                                 </div>
-
-                                {/* X-Axis Labels / Footer */}
-                                {vizType !== 'table' && (
-                                    <div className="px-8 pb-4 flex justify-between text-xs text-text-secondary border-t border-white/5 pt-2">
-                                        <span>Campanha A</span>
-                                        <span>Black Friday</span>
-                                        <span>Retargeting</span>
-                                        <span>Topo Funil</span>
-                                        <span>Conversão</span>
-                                    </div>
-                                )}
                             </div>
                         </div>
                     </div>
