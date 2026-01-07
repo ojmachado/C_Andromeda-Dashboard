@@ -14,6 +14,8 @@ import { AccountSettingsPage } from './components/AccountSettingsPage';
 import { LoginPage } from './components/LoginPage';
 import { SharedReportPage } from './components/SharedReportPage';
 import { DashboardTemplateSelector } from './components/DashboardTemplates';
+import { DashboardShareModal } from './components/DashboardShareModal';
+import { SharedWorkspaceDashboard } from './components/SharedWorkspaceDashboard';
 import type { Workspace, InsightData, DateRangePreset, APIGeneralInsights, DashboardTemplate, KpiConfig } from './types';
 
 declare global {
@@ -34,7 +36,7 @@ const ALL_OBJECTIVES = [
 
 type ViewLevel = 'campaign' | 'adset' | 'ad';
 
-const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkReady: boolean }) => {
+const DashboardPage = ({ workspaces, onUpdateWorkspace, sdkReady }: { workspaces: Workspace[], onUpdateWorkspace: (w: Workspace) => void, sdkReady: boolean }) => {
   const { workspaceId } = useParams();
   const navigate = useNavigate();
   const currentWorkspace = workspaces.find(w => w.id === workspaceId);
@@ -48,6 +50,9 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
   // Template State
   const [currentTemplate, setCurrentTemplate] = useState<DashboardTemplate>(SecureKV.getWorkspaceTemplate(workspaceId || ''));
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
+
+  // Sharing State
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
   // Filter States
   const [dateRange, setDateRange] = useState<DateRangePreset>('last_30d');
@@ -666,7 +671,7 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
                         </button>
                     </div>
 
-                    {/* Level Filter - Added as requested */}
+                    {/* Level Filter */}
                     <div className="bg-card-dark p-1 rounded-lg border border-border-dark flex items-center overflow-x-auto max-w-full">
                          {[
                             { id: 'campaign', label: 'Campanha' },
@@ -689,12 +694,18 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
 
                     {/* Action Buttons */}
                     <div className="flex items-center gap-2">
+                        <button 
+                            onClick={() => setIsShareModalOpen(true)}
+                            className="flex items-center gap-2 h-[38px] px-3 bg-transparent border border-border-dark hover:bg-border-dark/50 hover:border-primary/50 text-white text-xs font-bold rounded-lg transition-colors"
+                        >
+                            <span className="material-symbols-outlined text-sm">share</span> Compartilhar
+                        </button>
                         <Button 
                             variant="secondary" 
                             className="h-[38px] text-xs shrink-0 bg-card-dark border-border-dark hover:bg-white/5" 
                             onClick={() => window.print()}
                         >
-                            <span className="material-symbols-outlined text-sm">print</span> Exportar (PDF)
+                            <span className="material-symbols-outlined text-sm">print</span> Exportar
                         </Button>
                         <button 
                             onClick={handleRefresh}
@@ -788,6 +799,14 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
                     onClose={() => setIsTemplateModalOpen(false)}
                 />
             </Modal>
+
+            {/* Share Modal */}
+            <DashboardShareModal 
+                isOpen={isShareModalOpen}
+                onClose={() => setIsShareModalOpen(false)}
+                workspace={currentWorkspace}
+                onUpdateWorkspace={onUpdateWorkspace}
+            />
         </div>
     </AppShell>
   );
@@ -877,8 +896,9 @@ const App = () => {
 
     return (
         <Routes>
-            {/* Public Shared Route (Must be before others to match correctly) */}
+            {/* Public Shared Routes */}
             <Route path="/s/:shareId" element={<SharedReportPage />} />
+            <Route path="/shared/dashboard/:shareId" element={<SharedWorkspaceDashboard />} />
 
             {/* Public Login Route */}
             <Route path="/login" element={
@@ -908,7 +928,7 @@ const App = () => {
             
             <Route path="/w/:workspaceId/dashboard" element={
                 <ProtectedRoute isAuthenticated={isAuthenticated}>
-                    <DashboardPage workspaces={workspaces} sdkReady={sdkReady} />
+                    <DashboardPage workspaces={workspaces} onUpdateWorkspace={handleUpdateWorkspace} sdkReady={sdkReady} />
                 </ProtectedRoute>
             } />
             

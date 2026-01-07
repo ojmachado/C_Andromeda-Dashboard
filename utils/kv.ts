@@ -1,11 +1,12 @@
 
-import type { UserProfile, CustomReport, DashboardTemplate } from '../types';
+import type { UserProfile, CustomReport, DashboardTemplate, Workspace } from '../types';
 
 const KEYS = {
   META_CONFIG: 'sys:meta_config',
   TOKEN_PREFIX: 'wk:meta_token:',
   CONTEXT_PREFIX: 'wk:meta_context:',
   TEMPLATE_PREF_PREFIX: 'wk:template:',
+  SHARED_DASH_PREFIX: 'wk:share_config:',
   MASTER_PWD: 'sys:master_hash', // Simulated hash storage
   AUTH_SESSION: 'sys:auth_session',
   USER_PROFILE: 'sys:user_profile',
@@ -166,6 +167,33 @@ export const SecureKV = {
       const templateId = localStorage.getItem(`${KEYS.TEMPLATE_PREF_PREFIX}${workspaceId}`);
       const template = DASHBOARD_TEMPLATES.find(t => t.id === templateId);
       return template || DASHBOARD_TEMPLATES[0]; // Default to General
+  },
+
+  // --- Workspace Sharing Management ---
+  // Stores { isEnabled: boolean, shareId: string } per workspace
+  getWorkspaceShareConfig: (workspaceId: string) => {
+      const raw = localStorage.getItem(`${KEYS.SHARED_DASH_PREFIX}${workspaceId}`);
+      return raw ? JSON.parse(raw) : null;
+  },
+
+  saveWorkspaceShareConfig: (workspaceId: string, config: { isEnabled: boolean, shareId: string }) => {
+      localStorage.setItem(`${KEYS.SHARED_DASH_PREFIX}${workspaceId}`, JSON.stringify(config));
+      
+      // Also maintain a reverse lookup map: ShareID -> WorkspaceID
+      // This is crucial for the public route to find the data
+      const lookupKey = `sys:share_lookup:${config.shareId}`;
+      if (config.isEnabled) {
+          localStorage.setItem(lookupKey, workspaceId);
+      } else {
+          // If disabled, we might want to keep the key or remove it. 
+          // Removing ensures it's not accessible.
+          localStorage.removeItem(lookupKey);
+      }
+  },
+
+  // Global Lookup for public dashboard
+  getWorkspaceIdByShareToken: (shareId: string): string | null => {
+      return localStorage.getItem(`sys:share_lookup:${shareId}`);
   },
 
   // --- Auth Utilities ---

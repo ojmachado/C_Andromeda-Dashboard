@@ -39,7 +39,11 @@ export interface Workspace {
   metaConnected: boolean;
   adAccountId?: string;
   businessId?: string;
-  preferredTemplateId?: string; // New: Stores the selected dashboard layout
+  preferredTemplateId?: string;
+  sharedConfig?: {
+    isEnabled: boolean;
+    shareId: string;
+  };
 }
 
 export interface MetaBusiness {
