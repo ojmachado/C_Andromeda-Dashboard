@@ -44,7 +44,7 @@ const generateMockLogs = (count: number): ActivityLog[] => {
     });
 };
 
-export const ActivityLogsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
+export const ActivityLogsPage = ({ workspaces, isLoading }: { workspaces: Workspace[], isLoading?: boolean }) => {
     const { workspaceId } = useParams();
     const navigate = useNavigate();
     const [searchTerm, setSearchTerm] = useState('');
@@ -117,7 +117,7 @@ export const ActivityLogsPage = ({ workspaces }: { workspaces: Workspace[] }) =>
     };
 
     return (
-        <AppShell workspaces={workspaces} activeWorkspaceId={workspaceId}>
+        <AppShell workspaces={workspaces} activeWorkspaceId={workspaceId} isLoading={isLoading}>
             <div className="flex-1 overflow-y-auto bg-background-light dark:bg-background-dark p-6">
                 <div className="max-w-[1400px] mx-auto flex flex-col gap-6">
                     

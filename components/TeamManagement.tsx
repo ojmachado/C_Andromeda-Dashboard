@@ -349,7 +349,7 @@ const EditMemberModal: React.FC<EditMemberModalProps> = ({ isOpen, onClose, memb
     );
 };
 
-export const TeamManagementPage = ({ workspaces }: { workspaces: Workspace[] }) => {
+export const TeamManagementPage = ({ workspaces, isLoading }: { workspaces: Workspace[], isLoading?: boolean }) => {
     const { workspaceId } = useParams();
     const [members, setMembers] = useState<TeamMember[]>(MOCK_MEMBERS);
     const [selectedMember, setSelectedMember] = useState<TeamMember | null>(null);
@@ -424,7 +424,7 @@ export const TeamManagementPage = ({ workspaces }: { workspaces: Workspace[] }) 
     };
 
     return (
-        <AppShell workspaces={workspaces} activeWorkspaceId={workspaceId}>
+        <AppShell workspaces={workspaces} activeWorkspaceId={workspaceId} isLoading={isLoading}>
             <div className="w-full max-w-[1400px] mx-auto px-6 lg:px-8 py-8">
                 
                 {/* Breadcrumbs */}

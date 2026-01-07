@@ -6,10 +6,10 @@ import { Card, Button, Badge, Skeleton, Modal } from './UI';
 import { SecureKV } from '../utils/kv';
 import type { Workspace, AdCreativeData, APIGeneralInsights, DateRangePreset } from '../types';
 
-export const AdDetailsPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkReady: boolean }) => {
+export const AdDetailsPage = ({ workspaces, sdkReady, isLoading }: { workspaces: Workspace[], sdkReady: boolean, isLoading?: boolean }) => {
     const { workspaceId, adId } = useParams();
     const navigate = useNavigate();
-    const [isLoading, setIsLoading] = useState(true);
+    const [isDataLoading, setIsDataLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     // Filter State
@@ -49,12 +49,12 @@ export const AdDetailsPage = ({ workspaces, sdkReady }: { workspaces: Workspace[
                 return;
             }
 
-            setIsLoading(true);
+            setIsDataLoading(true);
             const token = await SecureKV.getWorkspaceToken(workspaceId);
 
             if (!token) {
                 setError("Token de acesso não encontrado. Reconecte o workspace.");
-                setIsLoading(false);
+                setIsDataLoading(false);
                 return;
             }
 
@@ -158,7 +158,7 @@ export const AdDetailsPage = ({ workspaces, sdkReady }: { workspaces: Workspace[
                 console.error(err);
                 setError("Erro ao carregar dados do anúncio.");
             } finally {
-                setIsLoading(false);
+                setIsDataLoading(false);
             }
         };
 
@@ -333,9 +333,9 @@ export const AdDetailsPage = ({ workspaces, sdkReady }: { workspaces: Workspace[
         }
     };
 
-    if (isLoading && !creative) { // Only show skeleton on initial load if no data
+    if (isDataLoading && !creative) { // Only show skeleton on initial load if no data
         return (
-            <AppShell workspaces={workspaces} activeWorkspaceId={workspaceId}>
+            <AppShell workspaces={workspaces} activeWorkspaceId={workspaceId} isLoading={isLoading}>
                 <div className="p-6 max-w-[1400px] mx-auto space-y-6">
                     <div className="flex justify-between">
                          <Skeleton className="h-10 w-64" />
@@ -351,7 +351,7 @@ export const AdDetailsPage = ({ workspaces, sdkReady }: { workspaces: Workspace[
     }
 
     return (
-        <AppShell workspaces={workspaces} activeWorkspaceId={workspaceId}>
+        <AppShell workspaces={workspaces} activeWorkspaceId={workspaceId} isLoading={isLoading}>
             <div className="flex-1 overflow-y-auto bg-background-light dark:bg-background-dark p-6">
                 <div className="max-w-[1400px] mx-auto flex flex-col gap-6">
                     
@@ -632,7 +632,7 @@ export const AdDetailsPage = ({ workspaces, sdkReady }: { workspaces: Workspace[
                                             </div>
                                         </div>
                                     </div>
-                                    {isLoading && <span className="text-xs text-text-secondary animate-pulse">Atualizando...</span>}
+                                    {isDataLoading && <span className="text-xs text-text-secondary animate-pulse">Atualizando...</span>}
                                 </div>
                                 {/* Pure CSS/SVG Chart */}
                                 <div className="relative w-full h-full flex items-end justify-between px-2 gap-2 mt-4 min-h-[200px]">
@@ -671,7 +671,7 @@ export const AdDetailsPage = ({ workspaces, sdkReady }: { workspaces: Workspace[
                                         </svg>
                                     ) : (
                                         <div className="absolute inset-0 flex items-center justify-center text-text-secondary text-sm border border-dashed border-slate-700 rounded-lg">
-                                            {isLoading ? "Carregando..." : "Sem dados de tendência suficientes para este período."}
+                                            {isDataLoading ? "Carregando..." : "Sem dados de tendência suficientes para este período."}
                                         </div>
                                     )}
                                 </div>

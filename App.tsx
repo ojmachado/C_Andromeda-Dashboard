@@ -39,7 +39,7 @@ const ALL_OBJECTIVES = [
 type ViewLevel = 'campaign' | 'adset' | 'ad';
 
 // --- Dedicated Template Selection Page ---
-const TemplatesPage = ({ workspaces }: { workspaces: Workspace[] }) => {
+const TemplatesPage = ({ workspaces, isLoading }: { workspaces: Workspace[], isLoading?: boolean }) => {
     const { workspaceId } = useParams();
     const navigate = useNavigate();
     const [currentTemplate, setCurrentTemplate] = useState<DashboardTemplate>(SecureKV.getWorkspaceTemplate(workspaceId || ''));
@@ -54,7 +54,7 @@ const TemplatesPage = ({ workspaces }: { workspaces: Workspace[] }) => {
     };
 
     return (
-        <AppShell workspaces={workspaces} activeWorkspaceId={workspaceId}>
+        <AppShell workspaces={workspaces} activeWorkspaceId={workspaceId} isLoading={isLoading}>
             <div className="max-w-[1400px] mx-auto py-8 px-6 space-y-8 h-full flex flex-col">
                 <div className="flex flex-col gap-2 border-b border-border-dark pb-6">
                     <h1 className="text-3xl font-black text-slate-900 dark:text-white">Galeria de Templates</h1>
@@ -71,12 +71,12 @@ const TemplatesPage = ({ workspaces }: { workspaces: Workspace[] }) => {
     );
 };
 
-const DashboardPage = ({ workspaces, onUpdateWorkspace, sdkReady }: { workspaces: Workspace[], onUpdateWorkspace: (w: Workspace) => void, sdkReady: boolean }) => {
+const DashboardPage = ({ workspaces, onUpdateWorkspace, sdkReady, isLoading }: { workspaces: Workspace[], onUpdateWorkspace: (w: Workspace) => void, sdkReady: boolean, isLoading?: boolean }) => {
   const { workspaceId } = useParams();
   const navigate = useNavigate();
   const currentWorkspace = workspaces.find(w => w.id === workspaceId);
 
-  const [isLoading, setIsLoading] = useState(true);
+  const [isDataLoading, setIsDataLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isExporting, setIsExporting] = useState(false); // State for PDF export
   const [stats, setStats] = useState<any>(null);
@@ -104,6 +104,12 @@ const DashboardPage = ({ workspaces, onUpdateWorkspace, sdkReady }: { workspaces
   
   // Request tracking to prevent race conditions
   const requestRef = useRef<number>(0);
+
+  // Filter Campaigns Logic
+  const filteredCampaigns = useMemo(() => {
+    if (selectedObjectives.length === 0) return campaigns;
+    return campaigns.filter(c => c.objective && selectedObjectives.includes(c.objective));
+  }, [campaigns, selectedObjectives]);
 
   // Load Template Preference on Mount
   useEffect(() => {
@@ -139,7 +145,7 @@ const DashboardPage = ({ workspaces, onUpdateWorkspace, sdkReady }: { workspaces
       const requestId = Date.now();
       requestRef.current = requestId;
 
-      const loadingState = isRefreshing ? setIsRefreshing : setIsLoading;
+      const loadingState = isRefreshing ? setIsRefreshing : setIsDataLoading;
       loadingState(true);
 
       const token = await SecureKV.getWorkspaceToken(workspaceId!);
@@ -574,14 +580,8 @@ const DashboardPage = ({ workspaces, onUpdateWorkspace, sdkReady }: { workspaces
       return { value: formattedValue, trend, subValue };
   };
 
-  const filteredCampaigns = useMemo(() => {
-      if (selectedObjectives.length === 0) return campaigns;
-      return campaigns.filter(c => c.objective && selectedObjectives.includes(c.objective));
-  }, [campaigns, selectedObjectives]);
-
-
   return (
-    <AppShell workspaces={workspaces} activeWorkspaceId={workspaceId}>
+    <AppShell workspaces={workspaces} activeWorkspaceId={workspaceId} isLoading={isLoading}>
         {/* We wrap the content in a div with an ID for html2canvas to target */}
         <div id="dashboard-content" className="max-w-[1400px] mx-auto py-8 px-6 space-y-8 bg-background-light dark:bg-background-dark min-h-screen">
             
@@ -708,7 +708,7 @@ const DashboardPage = ({ workspaces, onUpdateWorkspace, sdkReady }: { workspaces
                         ].map((l) => (
                             <button 
                                 key={l.id}
-                                onClick={() => setViewLevel(l.id as ViewLevel)} 
+                                onClick={() => setViewMode(l.id as ViewLevel)} 
                                 className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all whitespace-nowrap ${
                                     viewLevel === l.id 
                                     ? 'bg-primary text-white shadow-sm' 
@@ -743,7 +743,7 @@ const DashboardPage = ({ workspaces, onUpdateWorkspace, sdkReady }: { workspaces
                         </Button>
                         <button 
                             onClick={handleRefresh}
-                            disabled={isLoading || isRefreshing}
+                            disabled={isDataLoading || isRefreshing}
                             className="w-[38px] h-[38px] bg-primary hover:bg-primary-dark text-white rounded-lg flex items-center justify-center transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-primary/20 active:scale-95"
                             title="Atualizar Dados"
                         >
@@ -765,7 +765,7 @@ const DashboardPage = ({ workspaces, onUpdateWorkspace, sdkReady }: { workspaces
                             trend={data.trend}
                             subValue={data.subValue}
                             icon={kpi.icon}
-                            isLoading={isLoading && !isRefreshing} 
+                            isLoading={isDataLoading && !isRefreshing} 
                         />
                     );
                 })}
@@ -775,7 +775,7 @@ const DashboardPage = ({ workspaces, onUpdateWorkspace, sdkReady }: { workspaces
             <ChartContainer 
                 title={`Tendência: Investimento vs Conversas (${dateRange === 'custom' ? 'Customizado' : dateRange.replace('_', ' ').toUpperCase()})`} 
                 data={trendData} 
-                isLoading={isLoading && !isRefreshing} 
+                isLoading={isDataLoading && !isRefreshing} 
                 yAxisLabel="Investimento (BRL)"
             />
             
@@ -787,7 +787,7 @@ const DashboardPage = ({ workspaces, onUpdateWorkspace, sdkReady }: { workspaces
                     </h3>
                 </div>
                 {/* viewLevel passed here ensures correct headers */}
-                <DataTable data={filteredCampaigns} isLoading={isLoading && !isRefreshing} viewLevel={viewLevel} />
+                <DataTable data={filteredCampaigns} isLoading={isDataLoading && !isRefreshing} viewLevel={viewLevel} />
             </div>
 
             {/* Date Modal */}
@@ -842,17 +842,26 @@ const WorkspaceRouteWrapper = ({ workspaces, render }: { workspaces: Workspace[]
 
 const App = () => {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [isWorkspacesLoading, setIsWorkspacesLoading] = useState(true);
   const [sdkReady, setSdkReady] = useState(false);
   const [session, setSession] = useState(SecureKV.getSession());
 
   // Load Workspaces Mock (or from KV if persisted)
   useEffect(() => {
+      setIsWorkspacesLoading(true);
       // For demo purposes, we can init some workspaces if none
       const demoWorkspaces: Workspace[] = [
           { id: 'wk_demo', name: 'Demo Store', metaConnected: true, preferredTemplateId: 'tpl_ecom' },
           { id: 'wk_client_a', name: 'Client A', metaConnected: false }
       ];
-      setWorkspaces(demoWorkspaces);
+      
+      // Simulate network delay to show loading state
+      const timer = setTimeout(() => {
+          setWorkspaces(demoWorkspaces);
+          setIsWorkspacesLoading(false);
+      }, 1200);
+
+      return () => clearTimeout(timer);
   }, []);
 
   // Init Facebook SDK
@@ -916,17 +925,17 @@ const App = () => {
                 <Route path="/account" element={<AccountSettingsPage workspaces={workspaces} />} />
                 
                 {/* Workspace Specific */}
-                <Route path="/w/:workspaceId/dashboard" element={<DashboardPage workspaces={workspaces} onUpdateWorkspace={handleUpdateWorkspace} sdkReady={sdkReady} />} />
-                <Route path="/w/:workspaceId/templates" element={<TemplatesPage workspaces={workspaces} />} />
+                <Route path="/w/:workspaceId/dashboard" element={<DashboardPage workspaces={workspaces} onUpdateWorkspace={handleUpdateWorkspace} sdkReady={sdkReady} isLoading={isWorkspacesLoading} />} />
+                <Route path="/w/:workspaceId/templates" element={<TemplatesPage workspaces={workspaces} isLoading={isWorkspacesLoading} />} />
                 <Route path="/w/:workspaceId/setup" element={
                     <WorkspaceRouteWrapper workspaces={workspaces} render={(ws) => (
                         <SetupWizard workspace={ws} onUpdateWorkspace={handleUpdateWorkspace} sdkReady={sdkReady} />
                     )} />
                 } />
-                <Route path="/w/:workspaceId/reports" element={<CustomReportsPage workspaces={workspaces} />} />
-                <Route path="/w/:workspaceId/team" element={<TeamManagementPage workspaces={workspaces} />} />
-                <Route path="/w/:workspaceId/logs" element={<ActivityLogsPage workspaces={workspaces} />} />
-                <Route path="/w/:workspaceId/ads/:viewLevel/:adId" element={<AdDetailsPage workspaces={workspaces} sdkReady={sdkReady} />} />
+                <Route path="/w/:workspaceId/reports" element={<CustomReportsPage workspaces={workspaces} isLoading={isWorkspacesLoading} />} />
+                <Route path="/w/:workspaceId/team" element={<TeamManagementPage workspaces={workspaces} isLoading={isWorkspacesLoading} />} />
+                <Route path="/w/:workspaceId/logs" element={<ActivityLogsPage workspaces={workspaces} isLoading={isWorkspacesLoading} />} />
+                <Route path="/w/:workspaceId/ads/:viewLevel/:adId" element={<AdDetailsPage workspaces={workspaces} sdkReady={sdkReady} isLoading={isWorkspacesLoading} />} />
 
                 <Route path="/" element={<Navigate to="/workspaces" />} />
             </>

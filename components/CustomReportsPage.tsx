@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { AppShell } from './Navigation';
-import { Button, Card, Badge, Modal } from './UI';
+import { Button, Card } from './UI';
 import { SecureKV } from '../utils/kv';
 import type { Workspace, CustomReport } from '../types';
 import html2canvas from 'html2canvas';
@@ -45,9 +45,12 @@ interface ReportViewerProps {
     onEdit?: () => void;
     onShare?: () => void;
     isPublicView?: boolean;
+    workspaces?: Workspace[];
+    workspaceId?: string;
+    isLoading?: boolean;
 }
 
-export const ReportViewer: React.FC<ReportViewerProps> = ({ report, onClose, onEdit, onShare, isPublicView = false }) => {
+export const ReportViewer: React.FC<ReportViewerProps> = ({ report, onClose, onEdit, onShare, isPublicView = false, workspaces, workspaceId, isLoading }) => {
     const data = useMemo(() => generateReportData(report.config, report.type), [report]);
     const primaryMetric = report.config.metrics[0];
     const [isExporting, setIsExporting] = useState(false);
@@ -89,13 +92,9 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({ report, onClose, onE
 
     // Calculate Totals for Header
     const totalPrimary = data.reduce((acc, curr) => acc + (curr[primaryMetric] || 0), 0);
-    const formattedTotal = primaryMetric.includes('Spend') || primaryMetric.includes('Cost') 
-        ? totalPrimary.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-        : primaryMetric.includes('ROAS') || primaryMetric.includes('CTR')
-        ? (totalPrimary / data.length).toFixed(2) + (primaryMetric.includes('CTR') ? '%' : 'x')
-        : Math.floor(totalPrimary).toLocaleString();
 
-    return (
+    // Helper wrapper for AppShell if not public view
+    const ReportContent = (
         <div className={`flex flex-col h-full bg-background-light dark:bg-background-dark overflow-y-auto ${isPublicView ? '' : 'animate-in fade-in'}`}>
             {/* Viewer Header */}
             <div className="bg-white dark:bg-card-dark border-b border-gray-200 dark:border-border-dark px-6 py-4 sticky top-0 z-10 no-print">
@@ -332,9 +331,19 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({ report, onClose, onE
             </div>
         </div>
     );
+
+    if (isPublicView) {
+        return ReportContent;
+    }
+
+    return (
+        <AppShell workspaces={workspaces} activeWorkspaceId={workspaceId} isLoading={isLoading}>
+            {ReportContent}
+        </AppShell>
+    );
 };
 
-export const CustomReportsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
+export const CustomReportsPage = ({ workspaces, isLoading }: { workspaces: Workspace[], isLoading?: boolean }) => {
     const { workspaceId } = useParams();
     const [viewMode, setViewMode] = useState<'list' | 'builder' | 'view'>('list');
     const [reports, setReports] = useState<CustomReport[]>([]);
@@ -453,21 +462,6 @@ export const CustomReportsPage = ({ workspaces }: { workspaces: Workspace[] }) =
         setIsShareModalOpen(true);
     };
 
-    const togglePublicAccess = () => {
-        if (!currentViewReport || !workspaceId) return;
-        
-        const updated = { ...currentViewReport, isPublic: !currentViewReport.isPublic };
-        SecureKV.saveCustomReport(workspaceId, updated);
-        setCurrentViewReport(updated);
-        setReports(prev => prev.map(r => r.id === updated.id ? updated : r));
-    };
-
-    const copyToClipboard = () => {
-        navigator.clipboard.writeText(shareUrl);
-        setCopySuccess(true);
-        setTimeout(() => setCopySuccess(false), 2000);
-    };
-
     const toggleMetric = (metric: string) => {
         setSelectedMetrics(prev => 
             prev.includes(metric) ? prev.filter(m => m !== metric) : [...prev, metric]
@@ -479,70 +473,20 @@ export const CustomReportsPage = ({ workspaces }: { workspaces: Workspace[] }) =
     
     if (viewMode === 'view' && currentViewReport) {
         return (
-            <AppShell workspaces={workspaces} activeWorkspaceId={workspaceId}>
-                <ReportViewer 
-                    report={currentViewReport} 
-                    onClose={() => setViewMode('list')}
-                    onEdit={() => handleEditReport(currentViewReport)}
-                    onShare={handleOpenShare}
-                />
-                
-                {/* Share Modal */}
-                <Modal isOpen={isShareModalOpen} onClose={() => setIsShareModalOpen(false)} title="Compartilhar Dashboard">
-                    <div className="flex flex-col gap-6">
-                        <div className="bg-blue-500/10 border border-blue-500/20 p-4 rounded-lg flex gap-3">
-                            <span className="material-symbols-outlined text-blue-400">info</span>
-                            <div>
-                                <p className="text-sm text-blue-200 font-bold mb-1">Link Público Não Indexado</p>
-                                <p className="text-xs text-blue-200/70">
-                                    Este link permite que qualquer pessoa visualize este relatório sem fazer login. 
-                                    Ele não aparecerá em motores de busca (Google, Bing).
-                                </p>
-                            </div>
-                        </div>
-
-                        <div className="flex items-center justify-between p-4 bg-background-dark rounded-lg border border-border-dark">
-                            <span className="text-sm font-bold text-white">Acesso Público</span>
-                            <div 
-                                onClick={togglePublicAccess}
-                                className={`w-12 h-6 rounded-full cursor-pointer relative transition-colors ${currentViewReport.isPublic ? 'bg-primary' : 'bg-gray-600'}`}
-                            >
-                                <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-transform ${currentViewReport.isPublic ? 'left-7' : 'left-1'}`}></div>
-                            </div>
-                        </div>
-
-                        {currentViewReport.isPublic && (
-                            <div className="space-y-2 animate-in fade-in">
-                                <label className="text-xs font-bold text-text-secondary uppercase">Link de Compartilhamento</label>
-                                <div className="flex gap-2">
-                                    <input 
-                                        readOnly 
-                                        value={shareUrl} 
-                                        className="flex-1 bg-background-dark border border-border-dark rounded-lg px-4 py-2 text-sm text-text-secondary outline-none focus:border-primary" 
-                                    />
-                                    <button 
-                                        onClick={copyToClipboard}
-                                        className="bg-white/10 hover:bg-white/20 border border-white/10 text-white px-4 rounded-lg flex items-center gap-2 transition-colors"
-                                    >
-                                        <span className="material-symbols-outlined text-[18px]">
-                                            {copySuccess ? 'check' : 'content_copy'}
-                                        </span>
-                                        {copySuccess ? 'Copiado' : 'Copiar'}
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                    <div className="flex justify-end pt-6">
-                        <Button onClick={() => setIsShareModalOpen(false)}>Concluído</Button>
-                    </div>
-                </Modal>
-            </AppShell>
+            <ReportViewer 
+                report={currentViewReport} 
+                onClose={() => setViewMode('list')}
+                onEdit={() => handleEditReport(currentViewReport)}
+                onShare={handleOpenShare}
+                workspaces={workspaces}
+                workspaceId={workspaceId}
+                isLoading={isLoading}
+            />
         );
     }
 
     return (
-        <AppShell workspaces={workspaces} activeWorkspaceId={workspaceId}>
+        <AppShell workspaces={workspaces} activeWorkspaceId={workspaceId} isLoading={isLoading}>
             {viewMode === 'list' ? (
                 <div className="max-w-[1200px] mx-auto py-8 px-6 flex flex-col gap-8">
                     {/* Header */}

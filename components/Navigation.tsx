@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Link, useLocation, useParams, useNavigate } from 'react-router-dom';
-import { Badge, Button } from './UI.js';
+import { Badge, Button, Skeleton } from './UI.js';
 import { SecureKV } from '../utils/kv.js';
 import type { Workspace } from '../types.js';
 
@@ -9,9 +9,10 @@ interface AppShellProps {
   children: React.ReactNode;
   workspaces?: Workspace[];
   activeWorkspaceId?: string;
+  isLoading?: boolean;
 }
 
-export const AppShell: React.FC<AppShellProps> = ({ children, workspaces = [], activeWorkspaceId }) => {
+export const AppShell: React.FC<AppShellProps> = ({ children, workspaces = [], activeWorkspaceId, isLoading = false }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [isSwitcherOpen, setIsSwitcherOpen] = React.useState(false);
@@ -38,42 +39,49 @@ export const AppShell: React.FC<AppShellProps> = ({ children, workspaces = [], a
           </Link>
 
           {activeWorkspaceId && (
-            <div className="relative">
-              <button 
-                onClick={() => setIsSwitcherOpen(!isSwitcherOpen)}
-                className="flex items-center gap-2 px-3 py-1.5 hover:bg-white/5 rounded-lg border border-transparent hover:border-white/10 transition-all"
-              >
-                <div className="w-6 h-6 rounded bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-[10px] font-bold text-white">
-                  {activeWorkspace?.name.charAt(0)}
-                </div>
-                <span className="text-sm font-semibold text-white">{activeWorkspace?.name || "Workspace"}</span>
-                <span className="text-text-secondary text-[10px]">▼</span>
-              </button>
-
-              {isSwitcherOpen && (
-                <div className="absolute top-full left-0 mt-2 w-72 bg-card-dark border border-border-dark rounded-xl shadow-2xl overflow-hidden py-2 animate-in fade-in slide-in-from-top-1 z-50">
-                  <div className="px-4 py-2 text-xs font-bold text-text-secondary uppercase tracking-wider">Seus Workspaces</div>
-                  {workspaces.map(w => (
-                    <button 
-                      key={w.id} 
-                      onClick={() => { navigate(`/w/${w.id}/dashboard`); setIsSwitcherOpen(false); }}
-                      className="w-full text-left px-4 py-3 hover:bg-white/5 flex items-center justify-between group transition-colors"
-                    >
-                      <div className="flex items-center gap-3">
-                         <div className={`w-2 h-2 rounded-full ${w.metaConnected ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]' : 'bg-slate-500'}`}></div>
-                         <span className="text-sm font-medium text-white">{w.name}</span>
-                      </div>
-                      {w.id === activeWorkspaceId && <span className="material-symbols-outlined text-primary text-sm">check</span>}
-                    </button>
-                  ))}
-                  <div className="border-t border-border-dark mt-2 pt-2 px-2">
-                    <button className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-text-secondary hover:text-white hover:bg-white/5 rounded-lg transition-colors">
-                        <span className="material-symbols-outlined text-sm">add</span> Criar novo workspace
-                    </button>
+            isLoading ? (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/5 bg-white/5 animate-pulse">
+                  <Skeleton className="w-6 h-6 rounded" />
+                  <Skeleton className="w-24 h-4 rounded" />
+              </div>
+            ) : (
+              <div className="relative">
+                <button 
+                  onClick={() => setIsSwitcherOpen(!isSwitcherOpen)}
+                  className="flex items-center gap-2 px-3 py-1.5 hover:bg-white/5 rounded-lg border border-transparent hover:border-white/10 transition-all"
+                >
+                  <div className="w-6 h-6 rounded bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-[10px] font-bold text-white">
+                    {activeWorkspace?.name.charAt(0)}
                   </div>
-                </div>
-              )}
-            </div>
+                  <span className="text-sm font-semibold text-white">{activeWorkspace?.name || "Workspace"}</span>
+                  <span className="text-text-secondary text-[10px]">▼</span>
+                </button>
+
+                {isSwitcherOpen && (
+                  <div className="absolute top-full left-0 mt-2 w-72 bg-card-dark border border-border-dark rounded-xl shadow-2xl overflow-hidden py-2 animate-in fade-in slide-in-from-top-1 z-50">
+                    <div className="px-4 py-2 text-xs font-bold text-text-secondary uppercase tracking-wider">Seus Workspaces</div>
+                    {workspaces.map(w => (
+                      <button 
+                        key={w.id} 
+                        onClick={() => { navigate(`/w/${w.id}/dashboard`); setIsSwitcherOpen(false); }}
+                        className="w-full text-left px-4 py-3 hover:bg-white/5 flex items-center justify-between group transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                           <div className={`w-2 h-2 rounded-full ${w.metaConnected ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]' : 'bg-slate-500'}`}></div>
+                           <span className="text-sm font-medium text-white">{w.name}</span>
+                        </div>
+                        {w.id === activeWorkspaceId && <span className="material-symbols-outlined text-primary text-sm">check</span>}
+                      </button>
+                    ))}
+                    <div className="border-t border-border-dark mt-2 pt-2 px-2">
+                      <button className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-text-secondary hover:text-white hover:bg-white/5 rounded-lg transition-colors">
+                          <span className="material-symbols-outlined text-sm">add</span> Criar novo workspace
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
           )}
         </div>
         <nav className="flex items-center gap-1 md:gap-6">
