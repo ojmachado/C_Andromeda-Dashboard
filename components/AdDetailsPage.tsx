@@ -110,7 +110,7 @@ export const AdDetailsPage = ({ workspaces, sdkReady, isLoading }: { workspaces:
                     if (adRes.creative?.id) {
                         // Fetch Full Creative Details (Fallback for complex objects)
                         window.FB.api(`/${adRes.creative.id}`, {
-                            fields: 'name,title,body,image_url,thumbnail_url,object_story_spec,asset_feed_spec,call_to_action_type,video_id',
+                            fields: 'name,title,body,image_url,thumbnail_url,object_story_spec,asset_feed_spec,call_to_action_type,video_id,instagram_permalink_url',
                             ...apiParams
                         }, (creRes: any) => {
                             if (!creRes.error) {
@@ -247,7 +247,8 @@ export const AdDetailsPage = ({ workspaces, sdkReady, isLoading }: { workspaces:
         ? `https://www.facebook.com/${adMeta.effective_object_story_id}` 
         : adMeta?.preview_shareable_link;
     
-    const igLink = adMeta?.creative?.instagram_permalink_url;
+    // Determine Instagram Link: prioritize ad-level permalink, fallback to detailed creative permalink
+    const igLink = adMeta?.creative?.instagram_permalink_url || creative?.instagram_permalink_url;
 
     // Metrics
     const spend = parseFloat(insights?.spend || '0');

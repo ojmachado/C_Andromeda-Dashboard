@@ -95,6 +95,7 @@ export interface AdCreativeData {
   object_story_spec?: any;
   asset_feed_spec?: any; // For Dynamic Creative Ads
   call_to_action_type?: string;
+  instagram_permalink_url?: string;
 }
 
 export interface AdminConfig {
