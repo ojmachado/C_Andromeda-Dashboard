@@ -31,10 +31,11 @@ export interface MetaAdAccount {
 export interface InsightData {
   id?: string;
   name: string;
+  campaignName?: string; // New: Context for Ad/AdSet levels
   status?: string;
-  objective?: string; // New: Campaign Objective
-  adPreviewLink?: string; // New: Link to Ad
-  detailsLink?: string; // New: Internal Link to Details
+  objective?: string;
+  adPreviewLink?: string;
+  detailsLink?: string;
   spend: number;
   impressions: number;
   clicks: number;

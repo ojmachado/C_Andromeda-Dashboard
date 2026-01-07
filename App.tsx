@@ -106,10 +106,10 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
                  ]
              });
              const demoItems = [
-                 { id: 'c1', name: '[LRM][TRAFEGO][PERFIL][CBO][NATAL]', status: 'ACTIVE', objective: 'OUTCOME_TRAFFIC', spend: 749.73, impressions: 52569, clicks: 800, ctr: 2.90, cpm: 14.0, cpc: 0.49, roas: 4.2, cpa: 12.50, messages: 32, costPerConversation: 23.42, adPreviewLink: 'https://facebook.com' },
-                 { id: 'c2', name: '[INSTITUCIONAL][BRANDING][2024]', status: 'PAUSED', objective: 'OUTCOME_AWARENESS', spend: 299.23, impressions: 20569, clicks: 440, ctr: 2.1, cpm: 14.5, cpc: 0.68, roas: 1.5, cpa: 45.00, messages: 13, costPerConversation: 23.01 },
-                 { id: 'c3', name: '[CONVERSAO][LAL 1%][COMPRADORES]', status: 'ACTIVE', objective: 'OUTCOME_SALES', adPreviewLink: 'https://facebook.com', spend: 500.00, impressions: 9500, clicks: 200, ctr: 2.1, cpm: 52.6, cpc: 2.50, roas: 5.5, cpa: 25.00, messages: 5, costPerConversation: 100 },
-                 { id: 'c4', name: '[TESTE][SEM ENTREGA]', status: 'PAUSED', objective: 'OUTCOME_TRAFFIC', spend: 0, impressions: 0, clicks: 0, ctr: 0, cpm: 0, cpc: 0, roas: 0, cpa: 0, messages: 0, costPerConversation: 0 }
+                 { id: 'c1', name: '[LRM][TRAFEGO][PERFIL][CBO][NATAL]', status: 'ACTIVE', objective: 'OUTCOME_TRAFFIC', spend: 749.73, impressions: 52569, clicks: 800, ctr: 2.90, cpm: 14.0, cpc: 0.49, roas: 4.2, cpa: 12.50, messages: 32, costPerConversation: 23.42, adPreviewLink: 'https://facebook.com', campaignName: 'Campanha de Natal' },
+                 { id: 'c2', name: '[INSTITUCIONAL][BRANDING][2024]', status: 'PAUSED', objective: 'OUTCOME_AWARENESS', spend: 299.23, impressions: 20569, clicks: 440, ctr: 2.1, cpm: 14.5, cpc: 0.68, roas: 1.5, cpa: 45.00, messages: 13, costPerConversation: 23.01, campaignName: 'Branding 2024' },
+                 { id: 'c3', name: '[CONVERSAO][LAL 1%][COMPRADORES]', status: 'ACTIVE', objective: 'OUTCOME_SALES', adPreviewLink: 'https://facebook.com', spend: 500.00, impressions: 9500, clicks: 200, ctr: 2.1, cpm: 52.6, cpc: 2.50, roas: 5.5, cpa: 25.00, messages: 5, costPerConversation: 100, campaignName: 'Sales Conversion' },
+                 { id: 'c4', name: '[TESTE][SEM ENTREGA]', status: 'PAUSED', objective: 'OUTCOME_TRAFFIC', spend: 0, impressions: 0, clicks: 0, ctr: 0, cpm: 0, cpc: 0, roas: 0, cpa: 0, messages: 0, costPerConversation: 0, campaignName: 'Tests' }
              ].map(c => ({...c, detailsLink: `#/w/${workspaceId}/ads/${viewLevel}/${c.id}`}));
              
              // Filter Demo Data (Impressions > 0)
@@ -209,13 +209,19 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
               const messages = getActionVal(i.actions, 'onsite_conversion.messaging_conversation_started_7d');
               const costPerConversation = messages > 0 ? spend / messages : 0;
 
-              // Resolve Objective
+              // Resolve Objective and Campaign Name
               let objective = c.objective;
-              if (c.campaign && c.campaign.objective) objective = c.campaign.objective;
+              let campaignName = undefined;
+              
+              if (c.campaign) {
+                  if (c.campaign.objective) objective = c.campaign.objective;
+                  if (c.campaign.name) campaignName = c.campaign.name;
+              }
 
               return {
                   id: c.id,
                   name: c.name,
+                  campaignName: campaignName,
                   status: c.status,
                   objective: objective,
                   adPreviewLink: c.preview_shareable_link || undefined,
