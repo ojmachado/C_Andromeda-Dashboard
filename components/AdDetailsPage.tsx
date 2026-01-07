@@ -219,10 +219,12 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
     // Fallback for Purchases (can be pixel purchase or offsite_conversion)
     const purchases = getActionCount('purchase') || getActionCount('offsite_conversion.fb_pixel_purchase');
     const leads = getActionCount('lead') || getActionCount('on_facebook_lead');
+    const messages = getActionCount('onsite_conversion.messaging_conversation_started_7d');
     
     // Cost per Action
     const cpa = purchases > 0 ? spend / purchases : 0;
     const cpl = leads > 0 ? spend / leads : 0;
+    const costPerMessage = messages > 0 ? spend / messages : 0;
 
     // Generate Smooth Chart Path (Bezier)
     const getSmoothPath = (width: number, height: number) => {
@@ -410,7 +412,7 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                             {/* Conversion KPIs */}
                             <div className="flex flex-col gap-4">
                                 <h3 className="text-sm font-semibold text-slate-500 dark:text-text-secondary uppercase tracking-wider">Conversão e Retorno</h3>
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                                     
                                     {/* Lead Card */}
                                     <div className="bg-white dark:bg-[#1e1b2e] p-4 rounded-xl border border-gray-200 dark:border-[#292348] shadow-sm relative overflow-hidden group">
@@ -438,6 +440,21 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                                             <p className="text-xl font-bold text-slate-900 dark:text-white">{purchases}</p>
                                             <p className="text-[10px] mt-2 text-slate-500 dark:text-text-secondary font-mono">
                                                 CPA: {cpa > 0 ? cpa.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-'}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* Messages Card - NEW */}
+                                    <div className="bg-white dark:bg-[#1e1b2e] p-4 rounded-xl border border-gray-200 dark:border-[#292348] shadow-sm relative overflow-hidden group">
+                                        <div className="absolute inset-0 bg-sky-500/5 dark:bg-sky-500/10 group-hover:bg-sky-500/20 transition-colors"></div>
+                                        <div className="relative z-10">
+                                            <div className="flex items-start justify-between mb-2">
+                                                <p className="text-xs font-medium text-sky-600 dark:text-sky-400">Msgs Iniciadas</p>
+                                                <span className="material-symbols-outlined text-sky-500/60 text-[18px]">chat</span>
+                                            </div>
+                                            <p className="text-xl font-bold text-slate-900 dark:text-white">{messages}</p>
+                                            <p className="text-[10px] mt-2 text-slate-500 dark:text-text-secondary font-mono">
+                                                Custo: {costPerMessage > 0 ? costPerMessage.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-'}
                                             </p>
                                         </div>
                                     </div>
