@@ -71,16 +71,28 @@ export const AppShell: React.FC<AppShellProps> = ({ children, workspaces = [], a
         <nav className="flex items-center gap-1 md:gap-6">
           <Link 
             to="/workspaces" 
-            className={`text-sm font-medium transition-colors px-3 py-2 rounded-lg ${isActive('/workspaces') || isActive('/w/') ? 'text-white bg-white/5' : 'text-text-secondary hover:text-white hover:bg-white/5'}`}
+            className={`text-sm font-medium transition-colors px-3 py-2 rounded-lg ${isActive('/workspaces') || (isActive('/w/') && !activeWorkspaceId) ? 'text-white bg-white/5' : 'text-text-secondary hover:text-white hover:bg-white/5'}`}
           >
             Workspaces
           </Link>
           <Link 
             to="/integrations" 
-            className={`text-sm font-medium transition-colors px-3 py-2 rounded-lg ${isActive('/integrations') || isActive('/admin') ? 'text-white bg-white/5' : 'text-text-secondary hover:text-white hover:bg-white/5'}`}
+            className={`text-sm font-medium transition-colors px-3 py-2 rounded-lg ${isActive('/integrations') ? 'text-white bg-white/5' : 'text-text-secondary hover:text-white hover:bg-white/5'}`}
           >
             Integrações
           </Link>
+          
+          {/* New Logs Link - Visible only when inside a workspace */}
+          {activeWorkspaceId && (
+            <Link 
+                to={`/w/${activeWorkspaceId}/logs`} 
+                className={`text-sm font-medium transition-colors px-3 py-2 rounded-lg flex items-center gap-2 ${isActive(`/w/${activeWorkspaceId}/logs`) ? 'text-white bg-white/5' : 'text-text-secondary hover:text-white hover:bg-white/5'}`}
+            >
+                <span className="material-symbols-outlined text-[16px]">history</span>
+                Logs
+            </Link>
+          )}
+
           <div className="w-px h-4 bg-border-dark mx-2"></div>
           <div className="flex items-center gap-3 pl-2 cursor-pointer hover:opacity-80 transition-opacity">
             <div className="text-right hidden md:block">

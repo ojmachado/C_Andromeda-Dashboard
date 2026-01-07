@@ -18,6 +18,9 @@ export interface Workspace {
 export interface MetaBusiness {
   id: string;
   name: string;
+  currency: string;
+  timezone_name: string;
+  status: number;
 }
 
 export interface MetaAdAccount {
@@ -96,6 +99,21 @@ export interface APICampaignResponse {
 export interface APIDailyTrend {
   spend: string;
   date_start: string;
+  date_stop: string;
 }
 
 export type DateRangePreset = 'last_7d' | 'last_30d' | 'this_month' | 'last_month' | 'custom';
+
+export interface ActivityLog {
+  id: string;
+  timestamp: string;
+  user: {
+    name: string;
+    email: string;
+    avatar?: string;
+  };
+  action: 'CREATE' | 'UPDATE' | 'DELETE' | 'LOGIN' | 'EXPORT' | 'SYNC';
+  resource: string;
+  details: string;
+  status: 'SUCCESS' | 'FAILURE' | 'WARNING';
+}
