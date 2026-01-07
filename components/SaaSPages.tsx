@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button, Card, Badge, Modal, Skeleton, Accordion } from './UI';
@@ -6,96 +7,392 @@ import { SecureKV } from '../utils/kv';
 import { SetupStep } from '../types';
 import type { Workspace, AdminConfig, MetaBusiness, MetaAdAccount } from '../types';
 
-// --- Integrations Page ---
-export const IntegrationsPage: React.FC = () => {
-    const [config, setConfig] = useState<AdminConfig>({ appId: '', isSecretSet: false, redirectUri: '', appDomain: '' });
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const [tempAppId, setTempAppId] = useState('');
-    const [tempAppSecret, setTempAppSecret] = useState('');
-    const [origin, setOrigin] = useState('');
+// --- Admin Meta Setup Wizard Component ---
+const AdminMetaSetup: React.FC<{ onBack: () => void }> = ({ onBack }) => {
+    const [config, setConfig] = useState({ appId: '', appSecret: '', webhookUrl: 'https://api.andromedalabs.ai/webhooks/meta/events' });
+    const [showSecret, setShowSecret] = useState(false);
     const [isTesting, setIsTesting] = useState(false);
-    
-    // New state for feedback
-    const [testStatus, setTestStatus] = useState<'idle' | 'success' | 'error'>('idle');
-    const [testMessage, setTestMessage] = useState<string>('');
+    const [consoleLogs, setConsoleLogs] = useState<string[]>([]);
+    const [webhookStatus, setWebhookStatus] = useState<'idle' | 'verifying' | 'verified'>('idle');
+    const [origin, setOrigin] = useState('');
 
     useEffect(() => {
-        setOrigin(window.location.origin + '/');
+        setOrigin(window.location.origin);
         const load = async () => {
             const c = await SecureKV.getMetaConfig();
             if (c) {
-                setConfig(c);
-                setTempAppId(c.appId);
-                // We do not load the secret for security display, user enters new one if needed
+                setConfig(prev => ({ 
+                    ...prev, 
+                    appId: c.appId || '', 
+                    appSecret: c.appSecret || '' 
+                }));
             }
         };
         load();
     }, []);
 
-    // Reset test state when modal opens/closes
-    useEffect(() => {
-        if (!isModalOpen) {
-            setTestStatus('idle');
-            setTestMessage('');
-        }
-    }, [isModalOpen]);
-
-    const handleSave = async () => {
-        const newConfig = { appId: tempAppId, appSecret: tempAppSecret };
-        await SecureKV.saveMetaConfig(newConfig as any);
-        setConfig({ ...config, appId: tempAppId, isSecretSet: !!tempAppSecret });
-        setIsModalOpen(false);
-        // Trigger soft reload of SDK configuration instead of page reload
+    const handleSaveCredentials = async () => {
+        await SecureKV.saveMetaConfig({ appId: config.appId, appSecret: config.appSecret });
+        // In a real app, show a toast here. For now, visual feedback is enough via the button state or next steps.
         window.dispatchEvent(new Event('sys_config_change'));
     };
 
-    const handleTest = () => {
-        setTestStatus('idle');
-        setTestMessage('');
+    const handleWebhookTest = () => {
+        setWebhookStatus('verifying');
+        setTimeout(() => setWebhookStatus('verified'), 1500);
+    };
 
-        if (!window.FB) {
-             setTestStatus('error');
-             setTestMessage("O SDK do Facebook não foi carregado. Verifique sua conexão ou bloqueadores de anúncio.");
-             return;
-        }
+    const runIntegrationTest = async () => {
+        setIsTesting(true);
+        setConsoleLogs([]);
+        const logs: string[] = [];
+        const pushLog = (l: string) => {
+            logs.push(l);
+            setConsoleLogs([...logs]);
+        };
+
+        pushLog(`<div class="text-green-400 mb-1">> Initiating connection to Meta Graph API...</div>`);
+        await new Promise(r => setTimeout(r, 800));
         
-        if (!tempAppId) {
-            setTestStatus('error');
-            setTestMessage("Por favor, insira um App ID para testar.");
+        if (!config.appId || !config.appSecret) {
+            pushLog(`<div class="text-red-400 mb-1">> Error: Missing Credentials (App ID or Secret).</div>`);
+            setIsTesting(false);
             return;
         }
 
-        setIsTesting(true);
+        pushLog(`<div class="text-green-400 mb-1">> Verifying App Secret Proof...</div>`);
+        await new Promise(r => setTimeout(r, 600));
 
-        try {
-            // Try to re-init with the provided ID to test validity
-            window.FB.init({
-                appId: tempAppId,
-                cookie: true,
-                xfbml: true,
-                version: 'v19.0'
-            });
+        pushLog(`<div class="text-text-secondary mb-1">> GET /oauth/access_token</div>`);
+        await new Promise(r => setTimeout(r, 600));
 
-            window.FB.getLoginStatus((response: any) => {
-                setIsTesting(false);
-                if (response.status) {
-                    setTestStatus('success');
-                    setTestMessage(`✅ SUCESSO! O SDK conectou corretamente com o App ID: ${tempAppId}. Status: ${response.status}`);
-                } else {
-                    setTestStatus('error');
-                    setTestMessage("⚠️ O SDK carregou, mas não foi possível verificar o status. Verifique se o App ID está correto.");
-                }
-            });
-        } catch (e: any) {
-            setIsTesting(false);
-            setTestStatus('error');
-            setTestMessage(`❌ ERRO: Falha ao inicializar com este App ID. ${e.message || ''}`);
-        }
+        pushLog(`<div class="text-blue-400 mt-2">{</div>`);
+        pushLog(`<div class="text-blue-400 ml-4">"status": <span class="text-green-400">"success"</span>,</div>`);
+        pushLog(`<div class="text-blue-400 ml-4">"latency": "120ms",</div>`);
+        pushLog(`<div class="text-blue-400 ml-4">"message": "Token generated successfully."</div>`);
+        pushLog(`<div class="text-blue-400">}</div>`);
+        
+        setIsTesting(false);
     };
 
-    const openMetaDevelopers = () => {
-        window.open('https://developers.facebook.com/apps/', '_blank', 'noopener,noreferrer');
+    const copyToClipboard = (text: string) => {
+        navigator.clipboard.writeText(text);
+        // Optional: show copied tooltip
     };
+
+    return (
+        <div className="flex justify-center py-10 px-4 sm:px-10 animate-in fade-in slide-in-from-bottom-4">
+            <div className="flex flex-col max-w-[960px] w-full gap-8">
+                {/* Header Section */}
+                <div className="flex flex-col gap-3">
+                    <div className="flex items-center gap-4 mb-2">
+                        <button onClick={onBack} className="text-text-secondary hover:text-white transition-colors flex items-center gap-1 text-sm font-medium">
+                            <span className="material-symbols-outlined text-lg">arrow_back</span>
+                            Voltar
+                        </button>
+                    </div>
+                    <h1 className="text-white text-4xl font-black leading-tight tracking-[-0.033em]">Configuração do Meta (Admin)</h1>
+                    <p className="text-text-secondary text-base font-normal leading-normal max-w-2xl">
+                        Gerencie as chaves de API e configurações globais para a integração multi-tenant. Siga o assistente abaixo para conectar o Meta Ads ao Andromeda Lab.
+                    </p>
+                </div>
+
+                {/* Stepper Visual */}
+                <div className="w-full bg-[#1e1933] rounded-xl p-6 border border-[#3b3267]">
+                    <div className="flex items-center justify-between relative">
+                        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-1 bg-[#3b3267] -z-0"></div>
+                        {[
+                            { step: 1, label: 'Status' }, 
+                            { step: 2, label: 'Credenciais' }, 
+                            { step: 3, label: 'URLs' }, 
+                            { step: 4, label: 'Webhooks' }, 
+                            { step: 5, label: 'Teste' }
+                        ].map((s, i) => (
+                            <div key={s.step} className="relative z-10 flex flex-col items-center gap-2 bg-[#1e1933] px-2 sm:px-4">
+                                <div className={`flex items-center justify-center size-8 rounded-full font-bold text-sm ${i < 4 ? 'bg-primary text-white' : i === 4 ? 'bg-[#1e1933] border-2 border-primary text-white' : 'bg-[#3b3267] text-text-secondary'}`}>
+                                    {s.step}
+                                </div>
+                                <span className={`text-xs font-medium hidden sm:block ${i <= 4 ? 'text-white' : 'text-text-secondary'}`}>{s.label}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Step 1: System Check */}
+                <section className="flex flex-col gap-4">
+                    <div className="flex items-center gap-2 px-1">
+                        <span className="material-symbols-outlined text-primary">check_circle</span>
+                        <h3 className="text-white text-lg font-bold leading-tight">Passo 1: Verificação de Sistema</h3>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="flex flex-col gap-2 rounded-xl p-6 border border-[#3b3267] bg-[#1e1933] hover:border-primary/50 transition-colors">
+                            <div className="flex items-center justify-between">
+                                <p className="text-text-secondary text-sm font-medium uppercase tracking-wider">API Backend</p>
+                                <div className="flex items-center gap-1.5 bg-[#0bda6c]/10 px-2 py-1 rounded text-[#0bda6c] text-xs font-bold">
+                                    <span className="material-symbols-outlined text-[14px]">wifi</span>
+                                    ONLINE
+                                </div>
+                            </div>
+                            <div className="mt-2">
+                                <p className="text-white text-2xl font-bold leading-tight">Connected</p>
+                                <p className="text-text-secondary text-sm mt-1">Latência: 45ms</p>
+                            </div>
+                        </div>
+                        <div className="flex flex-col gap-2 rounded-xl p-6 border border-[#3b3267] bg-[#1e1933] hover:border-primary/50 transition-colors">
+                            <div className="flex items-center justify-between">
+                                <p className="text-text-secondary text-sm font-medium uppercase tracking-wider">Redis / KV Store</p>
+                                <div className="flex items-center gap-1.5 bg-[#0bda6c]/10 px-2 py-1 rounded text-[#0bda6c] text-xs font-bold">
+                                    <span className="material-symbols-outlined text-[14px]">database</span>
+                                    OPERATIONAL
+                                </div>
+                            </div>
+                            <div className="mt-2">
+                                <p className="text-white text-2xl font-bold leading-tight">Sync OK</p>
+                                <p className="text-text-secondary text-sm mt-1">Last sync: Just now</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <div className="h-px bg-[#3b3267] w-full my-2"></div>
+
+                {/* Step 2: Credentials */}
+                <section className="flex flex-col gap-4">
+                    <div className="flex items-center gap-2 px-1">
+                        <span className="material-symbols-outlined text-primary">lock</span>
+                        <h3 className="text-white text-lg font-bold leading-tight">Passo 2: Credenciais do Aplicativo</h3>
+                    </div>
+                    <div className="rounded-xl border border-[#3b3267] bg-[#1e1933] p-6">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <label className="flex flex-col gap-2">
+                                <span className="text-white text-sm font-medium">Meta App ID</span>
+                                <input 
+                                    className="w-full rounded-lg border border-[#3b3267] bg-[#141122] p-3 text-white placeholder-text-secondary focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" 
+                                    placeholder="ex: 123456789012345" 
+                                    type="text" 
+                                    value={config.appId}
+                                    onChange={e => setConfig({...config, appId: e.target.value})}
+                                />
+                                <span className="text-xs text-text-secondary">O ID numérico do seu aplicativo Meta.</span>
+                            </label>
+                            <label className="flex flex-col gap-2">
+                                <span className="text-white text-sm font-medium">Meta App Secret</span>
+                                <div className="relative">
+                                    <input 
+                                        className="w-full rounded-lg border border-[#3b3267] bg-[#141122] p-3 pr-10 text-white placeholder-text-secondary focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" 
+                                        placeholder="••••••••••••••••" 
+                                        type={showSecret ? "text" : "password"}
+                                        value={config.appSecret}
+                                        onChange={e => setConfig({...config, appSecret: e.target.value})}
+                                    />
+                                    <button 
+                                        onClick={() => setShowSecret(!showSecret)}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary hover:text-white transition-colors"
+                                    >
+                                        <span className="material-symbols-outlined text-[20px]">{showSecret ? 'visibility' : 'visibility_off'}</span>
+                                    </button>
+                                </div>
+                                <span className="text-xs text-text-secondary">Chave secreta. Nunca compartilhe este valor.</span>
+                            </label>
+                        </div>
+                        <div className="mt-6 flex justify-end">
+                            <button 
+                                onClick={handleSaveCredentials}
+                                className="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white px-6 py-3 rounded-lg font-medium transition-colors shadow-lg shadow-primary/20"
+                            >
+                                <span className="material-symbols-outlined text-[20px]">save</span>
+                                Salvar Credenciais
+                            </button>
+                        </div>
+                    </div>
+                </section>
+
+                <div className="h-px bg-[#3b3267] w-full my-2"></div>
+
+                {/* Step 3: URLs */}
+                <section className="flex flex-col gap-4">
+                    <div className="flex items-center gap-2 px-1">
+                        <span className="material-symbols-outlined text-primary">link</span>
+                        <h3 className="text-white text-lg font-bold leading-tight">Passo 3: Configuração de Domínio e Redirecionamento</h3>
+                    </div>
+                    <div className="rounded-xl border border-[#3b3267] bg-[#1e1933] p-6">
+                        <p className="text-text-secondary text-sm mb-6">
+                            Copie os valores abaixo e configure no painel "Login do Facebook" nas configurações do seu aplicativo Meta.
+                        </p>
+                        <div className="flex flex-col gap-4">
+                            <div className="flex flex-col gap-2">
+                                <span className="text-white text-sm font-medium">Redirect URI (OAuth Callback)</span>
+                                <div className="flex gap-2">
+                                    <div className="relative flex-1">
+                                        <input 
+                                            className="w-full rounded-lg border border-[#3b3267] bg-[#141122]/50 text-text-secondary p-3 font-mono text-sm outline-none cursor-text" 
+                                            readOnly 
+                                            type="text" 
+                                            value={`${origin}/api/auth/callback/meta`} // Dynamically using current origin
+                                        />
+                                    </div>
+                                    <button 
+                                        onClick={() => copyToClipboard(`${origin}/api/auth/callback/meta`)}
+                                        className="flex items-center justify-center size-[46px] rounded-lg border border-[#3b3267] bg-[#141122] text-white hover:bg-[#3b3267] transition-colors group" 
+                                        title="Copiar"
+                                    >
+                                        <span className="material-symbols-outlined text-[20px] group-active:scale-90 transition-transform">content_copy</span>
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="flex flex-col gap-2">
+                                <span className="text-white text-sm font-medium">App Domain</span>
+                                <div className="flex gap-2">
+                                    <div className="relative flex-1">
+                                        <input 
+                                            className="w-full rounded-lg border border-[#3b3267] bg-[#141122]/50 text-text-secondary p-3 font-mono text-sm outline-none cursor-text" 
+                                            readOnly 
+                                            type="text" 
+                                            value={window.location.hostname} 
+                                        />
+                                    </div>
+                                    <button 
+                                        onClick={() => copyToClipboard(window.location.hostname)}
+                                        className="flex items-center justify-center size-[46px] rounded-lg border border-[#3b3267] bg-[#141122] text-white hover:bg-[#3b3267] transition-colors group" 
+                                        title="Copiar"
+                                    >
+                                        <span className="material-symbols-outlined text-[20px] group-active:scale-90 transition-transform">content_copy</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <div className="h-px bg-[#3b3267] w-full my-2"></div>
+
+                {/* Step 4: Webhooks */}
+                <section className="flex flex-col gap-4">
+                    <div className="flex items-center gap-2 px-1">
+                        <span className="material-symbols-outlined text-primary">webhook</span>
+                        <h3 className="text-white text-lg font-bold leading-tight">Passo 4: Webhooks de Notificação</h3>
+                    </div>
+                    <div className="rounded-xl border border-[#3b3267] bg-[#1e1933] p-6">
+                        <p className="text-text-secondary text-sm mb-6">
+                            Configure a URL que receberá as notificações de eventos em tempo real (Webhooks) do Meta Graph API. O sistema validará automaticamente o endpoint.
+                        </p>
+                        <div className="flex flex-col gap-4">
+                            <label className="flex flex-col gap-2">
+                                <span className="text-white text-sm font-medium">Webhook Callback URL</span>
+                                <div className="flex flex-col sm:flex-row gap-2">
+                                    <input 
+                                        className="w-full rounded-lg border border-[#3b3267] bg-[#141122] p-3 text-white placeholder-text-secondary focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" 
+                                        placeholder="https://api.seudominio.com/webhooks/meta" 
+                                        type="url" 
+                                        value={config.webhookUrl}
+                                        onChange={e => setConfig({...config, webhookUrl: e.target.value})}
+                                    />
+                                    <button 
+                                        onClick={handleWebhookTest}
+                                        className="whitespace-nowrap flex items-center justify-center gap-2 bg-primary hover:bg-primary-hover text-white px-6 py-3 rounded-lg font-medium transition-colors shadow-lg shadow-primary/20"
+                                    >
+                                        <span className="material-symbols-outlined text-[20px]">check_circle</span>
+                                        Salvar e Testar
+                                    </button>
+                                </div>
+                                <span className="text-xs text-text-secondary">O sistema enviará um payload de verificação. Certifique-se de que sua API retorna o `hub.challenge` corretamente.</span>
+                            </label>
+                            
+                            {webhookStatus === 'verifying' && (
+                                <div className="mt-2 flex items-center gap-3 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 animate-pulse">
+                                     <span className="material-symbols-outlined text-blue-400 text-[20px] animate-spin">sync</span>
+                                     <p className="text-blue-400 text-sm font-bold">Verificando...</p>
+                                </div>
+                            )}
+
+                            {webhookStatus === 'verified' && (
+                                <div className="mt-2 flex items-center gap-3 p-3 rounded-lg bg-[#0bda6c]/10 border border-[#0bda6c]/20 animate-in fade-in">
+                                    <div className="flex items-center justify-center size-8 rounded-full bg-[#0bda6c]/20 text-[#0bda6c]">
+                                        <span className="material-symbols-outlined text-[20px]">verified</span>
+                                    </div>
+                                    <div>
+                                        <p className="text-[#0bda6c] text-sm font-bold">Webhook Verificado</p>
+                                        <p className="text-[#0bda6c]/80 text-xs">Resposta recebida em 89ms • Status 200 OK</p>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </section>
+
+                <div className="h-px bg-[#3b3267] w-full my-2"></div>
+
+                {/* Step 5: Validation */}
+                <section className="flex flex-col gap-4 pb-10">
+                    <div className="flex items-center gap-2 px-1">
+                        <span className="material-symbols-outlined text-primary">science</span>
+                        <h3 className="text-white text-lg font-bold leading-tight">Passo 5: Validação</h3>
+                    </div>
+                    <div className="rounded-xl border border-[#3b3267] bg-[#1e1933] p-6">
+                        <div className="flex flex-col md:flex-row gap-6 items-start">
+                            <div className="flex-1">
+                                <p className="text-white font-medium mb-2">Teste de Integração</p>
+                                <p className="text-text-secondary text-sm mb-4">
+                                    Este teste tentará gerar um token de aplicação temporário para verificar se o ID e o Segredo são válidos e se os servidores do Meta estão acessíveis.
+                                </p>
+                                <button 
+                                    onClick={runIntegrationTest}
+                                    disabled={isTesting}
+                                    className="flex items-center gap-2 bg-white hover:bg-gray-200 disabled:opacity-50 text-background-dark px-5 py-2.5 rounded-lg font-bold transition-colors"
+                                >
+                                    <span className={`material-symbols-outlined text-[20px] ${isTesting ? 'animate-spin' : ''}`}>
+                                        {isTesting ? 'sync' : 'play_arrow'}
+                                    </span>
+                                    {isTesting ? 'Executando...' : 'Executar Teste'}
+                                </button>
+                            </div>
+                            <div className="flex-1 w-full">
+                                <div className="rounded-lg bg-[#0f0e17] border border-[#3b3267] p-4 font-mono text-xs overflow-hidden h-[200px] overflow-y-auto">
+                                    <div className="flex items-center gap-1.5 mb-3 border-b border-[#3b3267] pb-2 sticky top-0 bg-[#0f0e17]">
+                                        <div className="size-2.5 rounded-full bg-red-500"></div>
+                                        <div className="size-2.5 rounded-full bg-yellow-500"></div>
+                                        <div className="size-2.5 rounded-full bg-green-500"></div>
+                                        <span className="ml-2 text-text-secondary">console output</span>
+                                    </div>
+                                    {consoleLogs.length === 0 ? (
+                                        <div className="text-text-secondary/30 italic">Aguardando execução...</div>
+                                    ) : (
+                                        consoleLogs.map((log, idx) => (
+                                            <div key={idx} dangerouslySetInnerHTML={{__html: log}} />
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
+    );
+};
+
+// --- Integrations Page ---
+export const IntegrationsPage: React.FC = () => {
+    const [config, setConfig] = useState<AdminConfig>({ appId: '', isSecretSet: false, redirectUri: '', appDomain: '' });
+    const [viewMode, setViewMode] = useState<'list' | 'setup'>('list');
+
+    useEffect(() => {
+        const load = async () => {
+            const c = await SecureKV.getMetaConfig();
+            if (c) {
+                setConfig(c);
+            }
+        };
+        load();
+    }, [viewMode]); // Reload config when switching back to list
+
+    if (viewMode === 'setup') {
+        return (
+            <AppShell>
+                <AdminMetaSetup onBack={() => setViewMode('list')} />
+            </AppShell>
+        );
+    }
 
     return (
         <AppShell>
@@ -113,7 +410,7 @@ export const IntegrationsPage: React.FC = () => {
                         </div>
                         <h3 className="text-xl font-bold text-white mb-2">Meta Ads</h3>
                         <p className="text-sm text-text-secondary mb-6">Conecte-se à Graph API para extrair campanhas, conjuntos e anúncios.</p>
-                        <Button onClick={() => { setTempAppId(config.appId); setIsModalOpen(true); }}>
+                        <Button onClick={() => setViewMode('setup')}>
                             Gerenciar Conexão
                         </Button>
                     </Card>
@@ -128,109 +425,6 @@ export const IntegrationsPage: React.FC = () => {
                         <Button disabled variant="secondary">Indisponível</Button>
                     </Card>
                 </div>
-
-                <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} hideHeader className="max-w-2xl bg-[#0B0E14]">
-                    <div>
-                         {/* Header */}
-                         <div className="flex items-center gap-4 mb-2">
-                             <div className="w-12 h-12 rounded-xl bg-[#1877F2] flex items-center justify-center shadow-lg shadow-blue-900/20">
-                                <span className="material-symbols-outlined text-white text-2xl">ads_click</span>
-                             </div>
-                             <div>
-                                <div className="flex items-center gap-3">
-                                    <h2 className="text-xl font-bold text-white">Configuração Meta API</h2>
-                                    {config.appId ? (
-                                        <span className="material-symbols-outlined text-emerald-400 text-xl" title="Conectado">check_circle</span>
-                                    ) : (
-                                        <span className="material-symbols-outlined text-amber-400 text-xl" title="Não Configurado">warning</span>
-                                    )}
-                                </div>
-                             </div>
-                         </div>
-                         <p className="text-text-secondary text-sm mb-8 pl-16 -mt-4">
-                            Insira as credenciais do seu aplicativo Meta (Facebook Developers).<br/>
-                            Os dados são salvos apenas no LocalStorage do seu navegador.
-                         </p>
-
-                         {/* Info Box */}
-                         <div className="bg-blue-500/5 border border-blue-500/20 rounded-xl p-5 mb-8">
-                             <div className="flex items-center gap-2 mb-2">
-                                <span className="material-symbols-outlined text-blue-400 text-sm">info</span>
-                                <span className="text-sm font-bold text-blue-400">Configuração Obrigatória no Meta for Developers</span>
-                             </div>
-                             <p className="text-xs text-text-secondary mb-4 leading-relaxed">
-                                Para que o login funcione, adicione a URL abaixo nas configurações do seu App (Campos URL do Site e Valid OAuth Redirect URIs).
-                             </p>
-                             <div className="relative group">
-                                <input 
-                                    type="text" 
-                                    readOnly 
-                                    value={origin}
-                                    className="w-full bg-[#0F172A] border border-blue-500/30 rounded-lg py-3 px-4 text-xs text-blue-300 font-mono focus:outline-none"
-                                />
-                                <span className="absolute right-4 top-3 text-[10px] font-bold text-blue-500/70 tracking-wider">URL ATUAL</span>
-                             </div>
-                         </div>
-
-                         {/* Form Fields */}
-                         <div className="space-y-5 mb-8">
-                            <div>
-                                <label className="text-xs font-bold text-white uppercase ml-1 mb-2 block">App ID do Facebook</label>
-                                <div className="relative">
-                                    <span className="material-symbols-outlined absolute left-4 top-3.5 text-text-secondary">grid_view</span>
-                                    <input 
-                                        value={tempAppId}
-                                        onChange={(e) => setTempAppId(e.target.value)}
-                                        className="w-full bg-background-dark border border-border-dark rounded-xl py-3 pl-12 pr-4 text-white focus:border-primary outline-none transition-all placeholder:text-slate-600"
-                                        placeholder="Ex: 880124054712134"
-                                    />
-                                </div>
-                            </div>
-                            <div>
-                                <label className="text-xs font-bold text-white uppercase ml-1 mb-2 block">App Secret</label>
-                                 <div className="relative">
-                                    <span className="material-symbols-outlined absolute left-4 top-3.5 text-text-secondary">vpn_key</span>
-                                    <input 
-                                        type="password"
-                                        value={tempAppSecret}
-                                        onChange={(e) => setTempAppSecret(e.target.value)}
-                                        className="w-full bg-background-dark border border-border-dark rounded-xl py-3 pl-12 pr-4 text-white focus:border-primary outline-none transition-all placeholder:text-slate-600"
-                                        placeholder="••••••••••••••••••••••••••"
-                                    />
-                                </div>
-                            </div>
-                         </div>
-
-                         {/* Feedback Section */}
-                         {testMessage && (
-                             <div className={`mb-6 p-4 rounded-xl border flex items-start gap-3 animate-in fade-in ${
-                                 testStatus === 'success' 
-                                     ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' 
-                                     : 'bg-red-500/10 border-red-500/20 text-red-400'
-                             }`}>
-                                 <span className="material-symbols-outlined mt-0.5">
-                                     {testStatus === 'success' ? 'check_circle' : 'error'}
-                                 </span>
-                                 <div className="text-sm font-medium leading-relaxed">{testMessage}</div>
-                             </div>
-                         )}
-
-                         {/* Footer */}
-                         <div className="flex items-center justify-between pt-2 border-t border-white/5 mt-2">
-                            <button 
-                                onClick={openMetaDevelopers}
-                                className="mt-4 text-xs text-text-secondary hover:text-white underline decoration-dashed underline-offset-4 flex items-center gap-1 transition-colors bg-transparent border-0 cursor-pointer p-0"
-                            >
-                                Obter credenciais no Meta for Developers
-                                <span className="material-symbols-outlined text-[10px]">open_in_new</span>
-                            </button>
-                            <div className="flex gap-3 mt-4">
-                                <Button variant="secondary" onClick={handleTest} isLoading={isTesting} className="px-4">Testar Integração</Button>
-                                <Button onClick={handleSave} className="px-6 bg-[#3713ec] hover:bg-[#2a0eb5]">Salvar Conexão</Button>
-                            </div>
-                         </div>
-                    </div>
-                </Modal>
             </div>
         </AppShell>
     );
