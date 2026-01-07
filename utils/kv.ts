@@ -1,5 +1,5 @@
 
-import type { UserProfile } from '../types';
+import type { UserProfile, CustomReport } from '../types';
 
 const KEYS = {
   META_CONFIG: 'sys:meta_config',
@@ -7,8 +7,36 @@ const KEYS = {
   CONTEXT_PREFIX: 'wk:meta_context:',
   MASTER_PWD: 'sys:master_hash', // Simulated hash storage
   AUTH_SESSION: 'sys:auth_session',
-  USER_PROFILE: 'sys:user_profile'
+  USER_PROFILE: 'sys:user_profile',
+  REPORTS_PREFIX: 'wk:reports:'
 };
+
+const DEFAULT_REPORTS: CustomReport[] = [
+    {
+        id: 'def_1',
+        name: 'Performance Q3 - Black Friday',
+        author: 'System',
+        lastEdited: 'Automático',
+        type: 'line',
+        config: { metrics: ['Spend Amount', 'Impressions'], dimension: 'Nome da Campanha', filters: [] }
+    },
+    {
+        id: 'def_2',
+        name: 'Análise de Criativos - Vídeo vs Imagem',
+        author: 'System',
+        lastEdited: 'Automático',
+        type: 'pie',
+        config: { metrics: ['CTR (All)'], dimension: 'Ad Format', filters: [] }
+    },
+    {
+        id: 'def_3',
+        name: 'ROAS por Campanha (Mês Atual)',
+        author: 'System',
+        lastEdited: 'Automático',
+        type: 'table',
+        config: { metrics: ['ROAS', 'Spend Amount'], dimension: 'Nome da Campanha', filters: [] }
+    }
+];
 
 export const SecureKV = {
   // Removed masterKey parameter
@@ -118,6 +146,41 @@ export const SecureKV = {
   saveUserProfile: (profile: UserProfile) => {
     localStorage.setItem(KEYS.USER_PROFILE, JSON.stringify(profile));
     window.dispatchEvent(new Event('user_profile_updated'));
+  },
+
+  // --- Custom Reports Management ---
+  getCustomReports: (workspaceId: string): CustomReport[] => {
+      const key = `${KEYS.REPORTS_PREFIX}${workspaceId}`;
+      const raw = localStorage.getItem(key);
+      if (!raw) {
+          // Seed defaults if empty
+          localStorage.setItem(key, JSON.stringify(DEFAULT_REPORTS));
+          return DEFAULT_REPORTS;
+      }
+      try {
+          return JSON.parse(raw);
+      } catch {
+          return [];
+      }
+  },
+
+  saveCustomReport: (workspaceId: string, report: CustomReport) => {
+      const reports = SecureKV.getCustomReports(workspaceId);
+      const index = reports.findIndex(r => r.id === report.id);
+      
+      if (index >= 0) {
+          reports[index] = report;
+      } else {
+          reports.unshift(report);
+      }
+      
+      localStorage.setItem(`${KEYS.REPORTS_PREFIX}${workspaceId}`, JSON.stringify(reports));
+  },
+
+  deleteCustomReport: (workspaceId: string, reportId: string) => {
+      const reports = SecureKV.getCustomReports(workspaceId);
+      const filtered = reports.filter(r => r.id !== reportId);
+      localStorage.setItem(`${KEYS.REPORTS_PREFIX}${workspaceId}`, JSON.stringify(filtered));
   },
 
   clearAll: () => {
