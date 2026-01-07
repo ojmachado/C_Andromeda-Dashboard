@@ -90,9 +90,6 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                 });
 
                 // Trigger calls
-                // Re-wrapping insights call to ensure timeParams are correctly applied for the specific endpoint logic if needed
-                // For simplicity assuming apiParams/timeParams are correct as per previous working code
-                
                 // Actual execution:
                 const [adRes, insightsRes, trendRes] = await Promise.all([
                     adPromise,
@@ -219,7 +216,10 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
     // Fallback for Purchases (can be pixel purchase or offsite_conversion)
     const purchases = getActionCount('purchase') || getActionCount('offsite_conversion.fb_pixel_purchase');
     const leads = getActionCount('lead') || getActionCount('on_facebook_lead');
-    const messages = getActionCount('onsite_conversion.messaging_conversation_started_7d');
+    // Enhanced Messaging check for various attributions
+    const messages = 
+        getActionCount('onsite_conversion.messaging_conversation_started_7d') || 
+        getActionCount('messaging_conversation_started_7d');
     
     // Cost per Action
     const cpa = purchases > 0 ? spend / purchases : 0;
@@ -444,7 +444,7 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                                         </div>
                                     </div>
 
-                                    {/* Messages Card - NEW */}
+                                    {/* Messages Card */}
                                     <div className="bg-white dark:bg-[#1e1b2e] p-4 rounded-xl border border-gray-200 dark:border-[#292348] shadow-sm relative overflow-hidden group">
                                         <div className="absolute inset-0 bg-sky-500/5 dark:bg-sky-500/10 group-hover:bg-sky-500/20 transition-colors"></div>
                                         <div className="relative z-10">
@@ -555,6 +555,7 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                                             else if (action.action_type.includes('lead')) { colorClass = 'bg-primary'; }
                                             else if (action.action_type.includes('click')) { colorClass = 'bg-blue-400'; }
                                             else if (action.action_type.includes('view')) { colorClass = 'bg-purple-500'; }
+                                            else if (action.action_type.includes('messaging') || action.action_type.includes('conversation')) { colorClass = 'bg-sky-500'; }
 
                                             return (
                                                 <tr key={idx} className="group hover:bg-gray-50 dark:hover:bg-[#25213a] transition-colors">
