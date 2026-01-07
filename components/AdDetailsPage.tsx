@@ -62,15 +62,14 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                 });
 
                 // 2. Fetch Insights (Overall)
+                // Added cost_per_action_type for precise CPA data
                 const insightsPromise = new Promise<any>((resolve) => {
                     window.FB.api(`/${adId}/insights`, {
-                        fields: 'spend,impressions,clicks,ctr,cpc,cpm,actions,action_values,purchase_roas,date_start,date_stop',
-                        ...apiParams
-                        // Note: date_preset passed via spread timeParams
+                        fields: 'spend,impressions,clicks,ctr,cpc,cpm,actions,action_values,purchase_roas,cost_per_action_type,date_start,date_stop',
+                        ...apiParams,
+                        ...timeParams
                     }, (res: any) => {
-                         // FB API quirk: sometimes passing date_preset in main object works better for insights
                          if(!res || res.error) {
-                             // Retry logic or error handling could go here
                              resolve(res);
                          } else {
                              resolve(res);
@@ -78,8 +77,7 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                     });
                 });
                 
-                // Note: For trend, we need a separate call if we want breakdown by day
-                // However, the standard `insights` endpoint supports `time_increment=1`
+                // 3. Trend Data
                 const trendPromise = new Promise<any>((resolve) => {
                      window.FB.api(`/${adId}/insights`, {
                         fields: 'spend,date_start',
@@ -90,14 +88,9 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                 });
 
                 // Trigger calls
-                // Actual execution:
                 const [adRes, insightsRes, trendRes] = await Promise.all([
                     adPromise,
-                    new Promise<any>((resolve) => window.FB.api(`/${adId}/insights`, {
-                        fields: 'spend,impressions,clicks,ctr,cpc,cpm,actions,action_values,purchase_roas,date_start,date_stop',
-                        ...apiParams,
-                        ...timeParams
-                    }, resolve)),
+                    insightsPromise,
                     trendPromise
                 ]);
 
@@ -125,7 +118,6 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                 // Process Trend
                 if (trendRes && trendRes.data) {
                     const rawData = [...trendRes.data];
-                    
                     // Sort properly by ISO date string first to ensure chronological order
                     rawData.sort((a: any, b: any) => new Date(a.date_start).getTime() - new Date(b.date_start).getTime());
 
@@ -134,7 +126,6 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                         value: parseFloat(d.spend || '0'),
                         rawDate: d.date_start
                     }));
-                    
                     setTrendData(trend);
                 } else {
                     setTrendData([]);
@@ -233,6 +224,11 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
         const action = insights?.actions?.find((a: any) => a.action_type === type);
         return action ? parseInt(action.value) : 0;
     };
+
+    const getCostPerAction = (type: string) => {
+        const item = insights?.cost_per_action_type?.find((a: any) => a.action_type === type);
+        return item ? parseFloat(item.value) : 0;
+    };
     
     // Fallback for Purchases (can be pixel purchase or offsite_conversion)
     const purchases = getActionCount('purchase') || getActionCount('offsite_conversion.fb_pixel_purchase');
@@ -244,10 +240,17 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
         getActionCount('onsite_conversion.messaging_conversation_started_7d') || 
         getActionCount('messaging_conversation_started_7d');
     
-    // Cost per Action
-    const cpa = purchases > 0 ? spend / purchases : 0;
-    const cpl = leads > 0 ? spend / leads : 0;
-    const costPerMessage = messages > 0 ? spend / messages : 0;
+    // Cost per Action Calculations
+    const cpa = purchases > 0 ? (spend / purchases) : 0;
+    const cpl = leads > 0 ? (spend / leads) : 0;
+    
+    // Cost Per Message Strategy: Try API field first, fallback to manual calculation
+    let costPerMessage = getCostPerAction('onsite_conversion.messaging_conversation_started_7d') || 
+                         getCostPerAction('messaging_conversation_started_7d');
+    
+    if (costPerMessage === 0 && messages > 0) {
+        costPerMessage = spend / messages;
+    }
 
     // Generate Smooth Chart Path (Bezier)
     const getSmoothPath = (width: number, height: number) => {
@@ -606,7 +609,15 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                                             const count = parseInt(action.value);
                                             const valueObj = insights.action_values?.find(v => v.action_type === action.action_type);
                                             const totalValue = valueObj ? parseFloat(valueObj.value) : 0;
-                                            const costPer = count > 0 ? spend / count : 0;
+                                            
+                                            // Cost calculation strategy
+                                            let costPer = 0;
+                                            const costObj = insights.cost_per_action_type?.find(c => c.action_type === action.action_type);
+                                            if (costObj) {
+                                                costPer = parseFloat(costObj.value);
+                                            } else if (count > 0) {
+                                                costPer = spend / count;
+                                            }
                                             
                                             // Icon mapping
                                             let colorClass = 'bg-slate-500';
