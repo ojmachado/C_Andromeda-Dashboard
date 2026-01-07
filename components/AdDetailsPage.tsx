@@ -158,7 +158,7 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
 
     // Robust Creative Data Extraction
     const creativeInfo = useMemo(() => {
-        if (!creative) return { title: '', body: '', image: '', domain: '' };
+        if (!creative) return { title: '', body: '', image: '', domain: '', type: 'IMAGE' };
 
         const spec = creative.object_story_spec;
         const assetFeed = creative.asset_feed_spec; // Dynamic Ads
@@ -166,28 +166,49 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
         // Helper to extract deeply nested properties safely
         const extract = (root: any, path: string) => get(root, path);
 
-        // 1. Try Object Story Spec (Standard Ads) first as it contains the actual post content
+        let type = 'IMAGE';
+        
+        // 1. Determine Type & Initial Content
+        if (extract(spec, 'video_data') || (assetFeed && extract(assetFeed, 'videos.0'))) {
+            type = 'VIDEO';
+        } else if (extract(spec, 'link_data.child_attachments')) {
+            type = 'CAROUSEL';
+        }
+
+        // 2. Extract Text
+        // Try Object Story Spec (Standard Ads) first as it contains the actual post content
         let title = extract(spec, 'link_data.name') || extract(spec, 'video_data.title');
         let body = extract(spec, 'link_data.message') || extract(spec, 'video_data.message');
-        let image = 
-            extract(spec, 'link_data.picture') || 
-            extract(spec, 'video_data.image_url') || 
-            extract(spec, 'photo_data.picture');
-
-        // 2. Try Asset Feed (Dynamic Ads)
+        
+        // Try Asset Feed (Dynamic Ads)
         if (assetFeed) {
              const firstTitle = extract(assetFeed, 'titles.0.text');
              const firstBody = extract(assetFeed, 'bodies.0.text'); // Primary Text
-             const firstImage = extract(assetFeed, 'images.0.url') || extract(assetFeed, 'videos.0.thumbnail_url');
-             
              if (!title) title = firstTitle;
              if (!body) body = firstBody;
-             if (!image) image = firstImage;
         }
 
-        // 3. Fallback to top-level fields (often metadata or legacy)
+        // Fallback to top-level fields
         if (!title) title = creative.title || '';
         if (!body) body = creative.body || '';
+
+        // 3. Extract Image based on Type
+        let image = '';
+        
+        if (type === 'VIDEO') {
+            image = extract(spec, 'video_data.image_url') || 
+                    extract(spec, 'video_data.picture') || 
+                    extract(assetFeed, 'videos.0.thumbnail_url');
+        } else if (type === 'CAROUSEL') {
+            image = extract(spec, 'link_data.child_attachments.0.picture');
+        } else {
+            // Standard Image
+            image = extract(spec, 'link_data.picture') || 
+                    extract(spec, 'photo_data.picture') ||
+                    extract(assetFeed, 'images.0.url');
+        }
+
+        // General Fallback
         if (!image) image = creative.image_url || creative.thumbnail_url || '';
 
         // Domain extraction
@@ -197,7 +218,7 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
             try { domain = new URL(link).hostname.replace('www.', '').toUpperCase(); } catch {}
         }
 
-        return { title, body, image, domain };
+        return { title, body, image, domain, type };
     }, [creative]);
 
     // Metrics Calculation
@@ -347,7 +368,7 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                         {/* Col 1: Creative Preview */}
                         <div className="xl:col-span-1 flex flex-col gap-4">
                             <h3 className="text-sm font-semibold text-slate-500 dark:text-text-secondary uppercase tracking-wider">Criativo</h3>
-                            <div className="bg-white dark:bg-[#1e1b2e] rounded-xl border border-gray-200 dark:border-[#292348] overflow-hidden shadow-sm flex flex-col">
+                            <div className="bg-white dark:bg-[#1e1b2e] rounded-xl border border-gray-200 dark:border-[#292348] overflow-hidden shadow-sm flex flex-col relative group">
                                 <div className="p-3 flex items-center gap-3 border-b border-gray-100 dark:border-[#292348]/50 bg-gray-50 dark:bg-[#25213a]">
                                     <div className="size-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-xs shadow-md shrink-0">
                                         {creative?.name?.substring(0,2).toUpperCase() || 'AD'}
@@ -355,6 +376,12 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                                     <div className="flex flex-col min-w-0">
                                         <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{creative?.name || 'Ad Name'}</p>
                                         <p className="text-[10px] text-slate-500 dark:text-text-secondary">Patrocinado • <span className="material-symbols-outlined text-[10px] align-middle">public</span></p>
+                                    </div>
+                                    {/* Asset Type Indicator */}
+                                    <div className="ml-auto">
+                                        {creativeInfo.type === 'VIDEO' && <span className="material-symbols-outlined text-text-secondary text-sm" title="Vídeo">videocam</span>}
+                                        {creativeInfo.type === 'CAROUSEL' && <span className="material-symbols-outlined text-text-secondary text-sm" title="Carrossel">view_carousel</span>}
+                                        {creativeInfo.type === 'IMAGE' && <span className="material-symbols-outlined text-text-secondary text-sm" title="Imagem">image</span>}
                                     </div>
                                 </div>
                                 <div className="p-4 pb-2">
@@ -364,14 +391,45 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                                 </div>
                                 
                                 {/* Image Container - Aspect Ratio Fix */}
-                                <div className="w-full relative mt-2 bg-gray-100 dark:bg-black/20 border-y border-gray-100 dark:border-[#292348]/50 min-h-[200px] flex items-center justify-center">
+                                <div className="w-full relative mt-2 bg-gray-100 dark:bg-black/20 border-y border-gray-100 dark:border-[#292348]/50 min-h-[250px] flex items-center justify-center overflow-hidden">
                                     {creativeInfo.image ? (
-                                        <img 
-                                            src={creativeInfo.image} 
-                                            alt="Ad Creative" 
-                                            className="w-full h-auto max-h-[600px] object-contain"
-                                            loading="lazy"
-                                        />
+                                        <>
+                                            <img 
+                                                src={creativeInfo.image} 
+                                                alt="Ad Creative" 
+                                                className="w-full h-auto max-h-[600px] object-contain relative z-10"
+                                                loading="lazy"
+                                            />
+                                            
+                                            {/* Video Play Button Overlay */}
+                                            {creativeInfo.type === 'VIDEO' && (
+                                                <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/20 group-hover:bg-black/10 transition-colors">
+                                                    <div className="w-16 h-16 bg-white/90 rounded-full flex items-center justify-center shadow-lg backdrop-blur-sm cursor-pointer hover:scale-105 transition-transform">
+                                                        <span className="material-symbols-outlined text-4xl text-black ml-1">play_arrow</span>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Carousel Indicators Overlay */}
+                                            {creativeInfo.type === 'CAROUSEL' && (
+                                                <>
+                                                    <div className="absolute inset-0 z-20 pointer-events-none flex items-center justify-between px-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        <div className="w-8 h-8 rounded-full bg-black/50 flex items-center justify-center text-white backdrop-blur-sm">
+                                                            <span className="material-symbols-outlined text-sm">chevron_left</span>
+                                                        </div>
+                                                        <div className="w-8 h-8 rounded-full bg-black/50 flex items-center justify-center text-white backdrop-blur-sm">
+                                                            <span className="material-symbols-outlined text-sm">chevron_right</span>
+                                                        </div>
+                                                    </div>
+                                                    <div className="absolute bottom-4 left-0 right-0 z-20 flex justify-center gap-1.5 pointer-events-none">
+                                                        <div className="w-2 h-2 rounded-full bg-primary shadow-sm border border-white/20"></div>
+                                                        <div className="w-1.5 h-1.5 rounded-full bg-white/60 shadow-sm backdrop-blur-md"></div>
+                                                        <div className="w-1.5 h-1.5 rounded-full bg-white/60 shadow-sm backdrop-blur-md"></div>
+                                                        <div className="w-1.5 h-1.5 rounded-full bg-white/60 shadow-sm backdrop-blur-md"></div>
+                                                    </div>
+                                                </>
+                                            )}
+                                        </>
                                     ) : (
                                         <div className="flex flex-col items-center justify-center text-text-secondary py-12">
                                             <span className="material-symbols-outlined text-4xl mb-2">image_not_supported</span>
