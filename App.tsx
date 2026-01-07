@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useParams, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { AppShell } from './components/Navigation';
@@ -8,6 +9,8 @@ import { IntegrationsPage, WorkspacesPage, SetupWizard } from './components/SaaS
 import { AdDetailsPage } from './components/AdDetailsPage';
 import { ActivityLogsPage } from './components/ActivityLogsPage';
 import { CustomReportsPage } from './components/CustomReportsPage';
+import { TeamManagementPage } from './components/TeamManagement';
+import { AccountSettingsPage } from './components/AccountSettingsPage';
 import { LoginPage } from './components/LoginPage';
 import type { Workspace, InsightData, DateRangePreset, APIGeneralInsights } from './types';
 
@@ -536,7 +539,7 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
                         ].map((l) => (
                             <button 
                                 key={l.id}
-                                onClick={() => setViewMode(l.id as ViewLevel)} 
+                                onClick={() => setViewLevel(l.id as ViewLevel)} 
                                 className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all whitespace-nowrap ${
                                     viewLevel === l.id 
                                     ? 'bg-primary text-white shadow-sm' 
@@ -776,6 +779,12 @@ const App = () => {
                 </ProtectedRoute>
             } />
             
+            <Route path="/account" element={
+                <ProtectedRoute isAuthenticated={isAuthenticated}>
+                    <AccountSettingsPage workspaces={workspaces} />
+                </ProtectedRoute>
+            } />
+            
             <Route path="/w/:workspaceId/dashboard" element={
                 <ProtectedRoute isAuthenticated={isAuthenticated}>
                     <DashboardPage workspaces={workspaces} sdkReady={sdkReady} />
@@ -803,6 +812,12 @@ const App = () => {
             <Route path="/w/:workspaceId/reports" element={
                 <ProtectedRoute isAuthenticated={isAuthenticated}>
                     <CustomReportsPage workspaces={workspaces} />
+                </ProtectedRoute>
+            } />
+
+            <Route path="/w/:workspaceId/team" element={
+                <ProtectedRoute isAuthenticated={isAuthenticated}>
+                    <TeamManagementPage workspaces={workspaces} />
                 </ProtectedRoute>
             } />
             

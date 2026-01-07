@@ -14,6 +14,15 @@ export interface User {
   avatar?: string;
 }
 
+export interface TeamMember {
+  id: string;
+  email: string;
+  name: string;
+  role: 'admin' | 'editor' | 'viewer';
+  status: 'active' | 'pending';
+  avatar?: string;
+}
+
 export interface Workspace {
   id: string;
   name: string;

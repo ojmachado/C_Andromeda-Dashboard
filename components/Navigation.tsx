@@ -103,6 +103,14 @@ export const AppShell: React.FC<AppShellProps> = ({ children, workspaces = [], a
                 </Link>
 
                 <Link 
+                    to={`/w/${activeWorkspaceId}/team`} 
+                    className={`text-sm font-medium transition-colors px-3 py-2 rounded-lg flex items-center gap-2 ${isActive(`/w/${activeWorkspaceId}/team`) ? 'text-white bg-white/5' : 'text-text-secondary hover:text-white hover:bg-white/5'}`}
+                >
+                    <span className="material-symbols-outlined text-[16px]">group</span>
+                    Equipe
+                </Link>
+
+                <Link 
                     to={`/w/${activeWorkspaceId}/logs`} 
                     className={`text-sm font-medium transition-colors px-3 py-2 rounded-lg flex items-center gap-2 ${isActive(`/w/${activeWorkspaceId}/logs`) ? 'text-white bg-white/5' : 'text-text-secondary hover:text-white hover:bg-white/5'}`}
                 >
@@ -113,7 +121,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children, workspaces = [], a
           )}
 
           <div className="w-px h-4 bg-border-dark mx-2"></div>
-          <div className="flex items-center gap-3 pl-2 cursor-pointer hover:opacity-80 transition-opacity">
+          <Link to="/account" className="flex items-center gap-3 pl-2 cursor-pointer hover:opacity-80 transition-opacity">
             <div className="text-right hidden md:block">
                 <div className="text-xs font-bold text-white">Admin User</div>
                 <div className="text-[10px] text-text-secondary">Pro Plan</div>
@@ -121,7 +129,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children, workspaces = [], a
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-purple-600 border border-white/10 flex items-center justify-center text-white shadow-lg">
                <span className="material-symbols-outlined text-sm">person</span>
             </div>
-          </div>
+          </Link>
         </nav>
       </header>
       <main className="flex-1 overflow-y-auto custom-scrollbar">
