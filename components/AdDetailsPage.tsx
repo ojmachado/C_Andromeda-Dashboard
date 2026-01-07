@@ -26,7 +26,7 @@ export const AdDetailsPage = ({ workspaces, sdkReady }: { workspaces: Workspace[
     const [adMeta, setAdMeta] = useState<any>(null);
     const [creative, setCreative] = useState<AdCreativeData | null>(null);
     const [insights, setInsights] = useState<APIGeneralInsights | null>(null);
-    const [trendData, setTrendData] = useState<{ date: string, value: number, rawDate: string }[]>([]);
+    const [trendData, setTrendData] = useState<{ date: string, spend: number, conversations: number, rawDate: string }[]>([]);
 
     // Close dropdown on click outside
     useEffect(() => {
@@ -99,7 +99,7 @@ export const AdDetailsPage = ({ workspaces, sdkReady }: { workspaces: Workspace[
                 // 3. Trend Data
                 const trendPromise = new Promise<any>((resolve) => {
                      window.FB.api(`/${adId}/insights`, {
-                        fields: 'spend,date_start',
+                        fields: 'spend,actions,date_start',
                         time_increment: 1,
                         ...apiParams,
                         ...timeParams
@@ -140,11 +140,15 @@ export const AdDetailsPage = ({ workspaces, sdkReady }: { workspaces: Workspace[
                     // Sort properly by ISO date string first to ensure chronological order
                     rawData.sort((a: any, b: any) => new Date(a.date_start).getTime() - new Date(b.date_start).getTime());
 
-                    const trend = rawData.map((d: any) => ({
-                        date: new Date(d.date_start).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
-                        value: parseFloat(d.spend || '0'),
-                        rawDate: d.date_start
-                    }));
+                    const trend = rawData.map((d: any) => {
+                        const msgs = d.actions?.find((a: any) => a.action_type === 'onsite_conversion.messaging_conversation_started_7d' || a.action_type === 'messaging_conversation_started_7d');
+                        return {
+                            date: new Date(d.date_start).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+                            spend: parseFloat(d.spend || '0'),
+                            conversations: msgs ? parseInt(msgs.value) : 0,
+                            rawDate: d.date_start
+                        };
+                    });
                     setTrendData(trend);
                 } else {
                     setTrendData([]);
@@ -279,14 +283,17 @@ export const AdDetailsPage = ({ workspaces, sdkReady }: { workspaces: Workspace[
     }
 
     // Generate Smooth Chart Path (Bezier)
-    const getSmoothPath = (width: number, height: number) => {
+    const getSmoothPath = (key: 'spend' | 'conversations', width: number, height: number) => {
         if (trendData.length < 2) return "";
         
-        const maxVal = Math.max(...trendData.map(d => d.value), 1);
+        const values = trendData.map(d => d[key]);
+        const maxVal = Math.max(...values, 1); 
+        
         // Map points to SVG coordinates
-        const points = trendData.map((d, i) => {
-            const x = (i / (trendData.length - 1)) * width;
-            const y = height - (d.value / maxVal) * height; // SVG Y is top-down
+        const points = values.map((val, i) => {
+            const x = (i / (values.length - 1)) * width;
+            // Pad 5px top and bottom
+            const y = height - (val / maxVal) * (height - 10) - 5; 
             return [x, y];
         });
 
@@ -612,7 +619,19 @@ export const AdDetailsPage = ({ workspaces, sdkReady }: { workspaces: Workspace[
                             {/* Main Chart */}
                             <div className="bg-white dark:bg-[#1e1b2e] p-6 rounded-xl border border-gray-200 dark:border-[#292348] shadow-sm flex flex-col flex-1 min-h-[300px]">
                                 <div className="flex items-center justify-between mb-6">
-                                    <h3 className="text-base font-bold text-slate-900 dark:text-white">Evolução de Investimento Diário</h3>
+                                    <div>
+                                        <h3 className="text-base font-bold text-slate-900 dark:text-white">Investimento vs Conversas (Diário)</h3>
+                                        <div className="flex items-center gap-4 mt-1">
+                                            <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-text-secondary">
+                                                <span className="w-2 h-2 rounded-full bg-primary"></span>
+                                                Investimento
+                                            </div>
+                                            <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-text-secondary">
+                                                <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                                                Conversas
+                                            </div>
+                                        </div>
+                                    </div>
                                     {isLoading && <span className="text-xs text-text-secondary animate-pulse">Atualizando...</span>}
                                 </div>
                                 {/* Pure CSS/SVG Chart */}
@@ -628,27 +647,26 @@ export const AdDetailsPage = ({ workspaces, sdkReady }: { workspaces: Workspace[
                                     {/* SVG Path for Smooth Line */}
                                     {trendData.length > 0 ? (
                                         <svg className="absolute inset-0 h-full w-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 1000 300">
-                                            <defs>
-                                                <linearGradient id="gradientDetails" x1="0%" x2="0%" y1="0%" y2="100%">
-                                                    <stop offset="0%" stopColor="#3713ec" stopOpacity="0.4"></stop>
-                                                    <stop offset="100%" stopColor="#3713ec" stopOpacity="0"></stop>
-                                                </linearGradient>
-                                            </defs>
-                                            {/* Fill Area */}
+                                            {/* Spend Line (Primary) */}
                                             <path 
-                                                d={`${getSmoothPath(1000, 300)} L 1000,300 L 0,300 Z`} 
-                                                fill="url(#gradientDetails)" 
-                                                stroke="none"
-                                            />
-                                            {/* Stroke Line */}
-                                            <path 
-                                                d={getSmoothPath(1000, 300)} 
+                                                d={getSmoothPath('spend', 1000, 300)} 
                                                 fill="none" 
                                                 stroke="#3713ec" 
                                                 strokeLinecap="round" 
                                                 strokeLinejoin="round" 
                                                 strokeWidth="3" 
                                                 vectorEffect="non-scaling-stroke"
+                                            />
+                                            {/* Conversations Line (Secondary) */}
+                                            <path 
+                                                d={getSmoothPath('conversations', 1000, 300)} 
+                                                fill="none" 
+                                                stroke="#34d399" 
+                                                strokeLinecap="round" 
+                                                strokeLinejoin="round" 
+                                                strokeWidth="3" 
+                                                vectorEffect="non-scaling-stroke"
+                                                opacity="0.8"
                                             />
                                         </svg>
                                     ) : (
