@@ -40,7 +40,7 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
   
   // Filter States
   const [dateRange, setDateRange] = useState<DateRangePreset>('last_30d');
-  const [viewLevel, setViewLevel] = useState<ViewLevel>('campaign');
+  const [viewLevel, setViewLevel] = useState<ViewLevel>('campaign'); // Level Filter State
   const [customDates, setCustomDates] = useState({ start: '', end: '' });
   const [isDateModalOpen, setIsDateModalOpen] = useState(false);
   const [tempCustomDates, setTempCustomDates] = useState({ start: '', end: '' });
@@ -172,6 +172,7 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
       });
       
       // 2. Metadata List (Campaigns/AdSets/Ads) - NO Insights here to avoid N+1
+      // Dynamic Path based on View Level Filter
       const levelPath = viewLevel === 'adset' ? 'adsets' : viewLevel === 'ad' ? 'ads' : 'campaigns';
       
       // Dynamic fields based on view level
@@ -192,7 +193,7 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
       const p3_insights = new Promise<any>((resolve) => {
           window.FB.api(`/${accountId}/insights`, {
              access_token: token,
-             level: viewLevel,
+             level: viewLevel, // Uses the current level filter
              fields: 'campaign_id,adset_id,ad_id,spend,impressions,clicks,ctr,cpm,cpc,actions,purchase_roas',
              limit: 1000,
              ...apiTimeParams
@@ -505,7 +506,7 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
                         </button>
                     </div>
 
-                    {/* Level Filter */}
+                    {/* Level Filter - Added as requested */}
                     <div className="bg-card-dark p-1 rounded-lg border border-border-dark flex items-center overflow-x-auto max-w-full">
                          {[
                             { id: 'campaign', label: 'Campanha' },
@@ -612,6 +613,7 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
                         Performance por {viewLevel === 'campaign' ? 'Campanha' : viewLevel === 'adset' ? 'Conjunto de Anúncios' : 'Anúncio'}
                     </h3>
                 </div>
+                {/* viewLevel passed here ensures correct headers */}
                 <DataTable data={filteredCampaigns} isLoading={isLoading && !isRefreshing} viewLevel={viewLevel} />
             </div>
 
