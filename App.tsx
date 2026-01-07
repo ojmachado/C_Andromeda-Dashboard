@@ -368,8 +368,8 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
                 {/* Title & Status */}
                 <div className="flex items-center gap-4">
                     <div>
-                        <h1 className="text-3xl font-black text-slate-900 dark:text-white">Dashboard</h1>
-                        <p className="text-text-secondary text-sm">Visão geral de performance.</p>
+                        <h1 className="text-3xl font-black text-slate-900 dark:text-white">Dashboard do Workspace</h1>
+                        <p className="text-text-secondary text-sm">Visão unificada de performance do Meta Ads.</p>
                     </div>
                     {/* Enhanced Status Indicator */}
                     <div className={`hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full border text-[11px] font-bold uppercase tracking-wider transition-all cursor-pointer hover:opacity-80 ${

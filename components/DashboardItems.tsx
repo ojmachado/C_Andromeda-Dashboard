@@ -165,7 +165,7 @@ export const DataTable: React.FC<{ data: InsightData[]; isLoading?: boolean; vie
   };
 
   const headers = [
-      { key: 'name', label: 'Nome' },
+      { key: 'name', label: viewLevel === 'campaign' ? 'Campanha' : viewLevel === 'adset' ? 'Conjunto' : 'Anúncio' },
       { key: 'status', label: 'Status' },
       // Only show Ad Link column for ads
       ...(viewLevel === 'ad' ? [{ key: 'adPreviewLink', label: 'Link do Anúncio' }] : []),
