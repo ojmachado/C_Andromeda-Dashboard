@@ -39,6 +39,8 @@ export interface InsightData {
   status?: string;
   objective?: string;
   adPreviewLink?: string;
+  fbLink?: string; // New: Direct Facebook Post Link
+  igLink?: string; // New: Direct Instagram Post Link
   detailsLink?: string;
   spend: number;
   impressions: number;

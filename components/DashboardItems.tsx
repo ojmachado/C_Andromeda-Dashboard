@@ -167,8 +167,11 @@ export const DataTable: React.FC<{ data: InsightData[]; isLoading?: boolean; vie
   const headers = [
       { key: 'name', label: viewLevel === 'campaign' ? 'Campanha' : viewLevel === 'adset' ? 'Conjunto' : 'Anúncio' },
       { key: 'status', label: 'Status' },
-      // Only show Ad Link column for ads
-      ...(viewLevel === 'ad' ? [{ key: 'adPreviewLink', label: 'Link do Anúncio' }] : []),
+      // FB/IG Columns only for ads
+      ...(viewLevel === 'ad' ? [
+          { key: 'fbLink', label: 'FB', icon: 'facebook' },
+          { key: 'igLink', label: 'IG', icon: 'instagram' }
+      ] : []),
       { key: 'spend', label: 'Investimento' },
       { key: 'messages', label: 'Msgs' }, 
       { key: 'costPerConversation', label: 'Custo/Msg' },
@@ -184,15 +187,34 @@ export const DataTable: React.FC<{ data: InsightData[]; isLoading?: boolean; vie
       <table className="w-full text-left border-collapse min-w-[1400px]">
         <thead className="bg-slate-50 dark:bg-white/5 border-b border-slate-200 dark:border-white/10">
           <tr>
-            {headers.map(h => (
+            {headers.map((h, i) => (
               <th 
-                key={h.key} 
-                onClick={() => h.key !== 'adPreviewLink' && requestSort(h.key as SortKey)}
-                className={`px-6 py-4 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest ${h.key !== 'adPreviewLink' ? 'cursor-pointer hover:text-primary' : ''} transition-colors select-none group whitespace-nowrap`}
+                key={i}
+                onClick={() => h.key !== 'fbLink' && h.key !== 'igLink' && requestSort(h.key as SortKey)}
+                className={`px-6 py-4 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest ${h.key !== 'fbLink' && h.key !== 'igLink' ? 'cursor-pointer hover:text-primary' : ''} transition-colors select-none group whitespace-nowrap`}
               >
-                <div className="flex items-center">
-                    {h.label}
-                    {h.key !== 'adPreviewLink' && <SortIcon column={h.key as SortKey} />}
+                <div className="flex items-center gap-1">
+                    {h.icon === 'facebook' && (
+                        <svg className="w-4 h-4 text-[#1877F2]" fill="currentColor" viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.791-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+                    )}
+                    {h.icon === 'instagram' && (
+                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <rect width="24" height="24" rx="6" fill="url(#ig_gradient)" />
+                            <circle cx="12" cy="12" r="4" stroke="white" strokeWidth="2" />
+                            <circle cx="18" cy="6" r="1.5" fill="white" />
+                            <defs>
+                                <linearGradient id="ig_gradient" x1="2" y1="22" x2="22" y2="2" gradientUnits="userSpaceOnUse">
+                                    <stop stopColor="#f09433" />
+                                    <stop offset="0.25" stopColor="#e6683c" />
+                                    <stop offset="0.5" stopColor="#dc2743" />
+                                    <stop offset="0.75" stopColor="#cc2366" />
+                                    <stop offset="1" stopColor="#bc1888" />
+                                </linearGradient>
+                            </defs>
+                        </svg>
+                    )}
+                    {!h.icon && h.label}
+                    {h.key !== 'fbLink' && h.key !== 'igLink' && <SortIcon column={h.key as SortKey} />}
                 </div>
               </th>
             ))}
@@ -203,7 +225,7 @@ export const DataTable: React.FC<{ data: InsightData[]; isLoading?: boolean; vie
              Array(5).fill(0).map((_, i) => (
                <tr key={i} className="border-b border-slate-100 dark:border-white/5">
                  <td className="px-6 py-4"><Skeleton className="h-4 w-48" /></td>
-                 {Array(10).fill(0).map((__, j) => (
+                 {Array(11).fill(0).map((__, j) => (
                    <td key={j} className="px-6 py-4"><Skeleton className="h-4 w-12" /></td>
                  ))}
                </tr>
@@ -260,24 +282,57 @@ export const DataTable: React.FC<{ data: InsightData[]; isLoading?: boolean; vie
                     </span>
                 </td>
                 
-                {/* Link do Anúncio (Facebook & Instagram) - Only if viewing ads */}
+                {/* Facebook Link */}
                 {viewLevel === 'ad' && (
                     <td className="px-6 py-4">
-                        {row.adPreviewLink ? (
-                            <div className="flex items-center gap-2">
-                                {/* Facebook Link */}
-                                <a 
-                                    href={row.adPreviewLink} 
-                                    target="_blank" 
-                                    rel="noopener noreferrer" 
-                                    className="w-8 h-8 rounded-lg bg-[#1877F2]/10 border border-[#1877F2]/20 flex items-center justify-center text-[#1877F2] hover:bg-[#1877F2] hover:text-white transition-colors"
-                                    title="Visualizar Anúncio"
-                                >
-                                    <span className="material-symbols-outlined text-sm">open_in_new</span>
-                                </a>
-                            </div>
+                        {row.fbLink ? (
+                            <a 
+                                href={row.fbLink} 
+                                target="_blank" 
+                                rel="noopener noreferrer" 
+                                className="w-8 h-8 rounded-lg bg-[#1877F2]/10 border border-[#1877F2]/20 flex items-center justify-center text-[#1877F2] hover:bg-[#1877F2] hover:text-white transition-colors"
+                                title="Abrir no Facebook"
+                            >
+                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.791-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+                            </a>
                         ) : (
-                            <span className="text-xs text-text-secondary opacity-30">N/A</span>
+                            <div className="w-8 h-8 rounded-lg bg-slate-500/5 border border-slate-500/10 flex items-center justify-center text-slate-400 cursor-not-allowed opacity-50">
+                                <span className="material-symbols-outlined text-sm">block</span>
+                            </div>
+                        )}
+                    </td>
+                )}
+
+                {/* Instagram Link */}
+                {viewLevel === 'ad' && (
+                    <td className="px-6 py-4">
+                        {row.igLink ? (
+                            <a 
+                                href={row.igLink} 
+                                target="_blank" 
+                                rel="noopener noreferrer" 
+                                className="w-8 h-8 rounded-lg bg-pink-500/10 border border-pink-500/20 flex items-center justify-center hover:bg-pink-500/20 transition-colors group/ig"
+                                title="Abrir no Instagram"
+                            >
+                                <svg className="w-4 h-4 group-hover/ig:scale-110 transition-transform" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <rect width="24" height="24" rx="6" fill="url(#ig_gradient_btn)" />
+                                    <circle cx="12" cy="12" r="4" stroke="white" strokeWidth="2" />
+                                    <circle cx="18" cy="6" r="1.5" fill="white" />
+                                    <defs>
+                                        <linearGradient id="ig_gradient_btn" x1="2" y1="22" x2="22" y2="2" gradientUnits="userSpaceOnUse">
+                                            <stop stopColor="#f09433" />
+                                            <stop offset="0.25" stopColor="#e6683c" />
+                                            <stop offset="0.5" stopColor="#dc2743" />
+                                            <stop offset="0.75" stopColor="#cc2366" />
+                                            <stop offset="1" stopColor="#bc1888" />
+                                        </linearGradient>
+                                    </defs>
+                                </svg>
+                            </a>
+                        ) : (
+                            <div className="w-8 h-8 rounded-lg bg-slate-500/5 border border-slate-500/10 flex items-center justify-center text-slate-400 cursor-not-allowed opacity-50">
+                                <span className="material-symbols-outlined text-sm">block</span>
+                            </div>
                         )}
                     </td>
                 )}

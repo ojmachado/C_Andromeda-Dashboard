@@ -120,9 +120,9 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
              
              if (viewLevel === 'ad') {
                  demoItems = [
-                     { id: 'ad1', name: 'Instagram Post: Promoção Natal', status: 'ACTIVE', objective: 'OUTCOME_TRAFFIC', spend: 749.73, impressions: 52569, clicks: 800, ctr: 2.90, cpm: 14.0, cpc: 0.49, roas: 4.2, cpa: 12.50, messages: 32, costPerConversation: 23.42, adPreviewLink: 'https://facebook.com', campaignName: '[LRM][TRAFEGO][PERFIL][CBO][NATAL]', campaignDetailsLink: `#/w/${workspaceId}/ads/campaign/c1` },
-                     { id: 'ad2', name: 'Reels: Branding Video V2', status: 'PAUSED', objective: 'OUTCOME_AWARENESS', spend: 299.23, impressions: 20569, clicks: 440, ctr: 2.1, cpm: 14.5, cpc: 0.68, roas: 1.5, cpa: 45.00, messages: 13, costPerConversation: 23.01, campaignName: '[INSTITUCIONAL][BRANDING][2024]', campaignDetailsLink: `#/w/${workspaceId}/ads/campaign/c2` },
-                     { id: 'ad3', name: 'Carrossel: LAL 1%', status: 'ACTIVE', objective: 'OUTCOME_SALES', adPreviewLink: 'https://facebook.com', spend: 500.00, impressions: 9500, clicks: 200, ctr: 2.1, cpm: 52.6, cpc: 2.50, roas: 5.5, cpa: 25.00, messages: 5, costPerConversation: 100, campaignName: '[CONVERSAO][LAL 1%][COMPRADORES]', campaignDetailsLink: `#/w/${workspaceId}/ads/campaign/c3` },
+                     { id: 'ad1', name: 'Instagram Post: Promoção Natal', status: 'ACTIVE', objective: 'OUTCOME_TRAFFIC', spend: 749.73, impressions: 52569, clicks: 800, ctr: 2.90, cpm: 14.0, cpc: 0.49, roas: 4.2, cpa: 12.50, messages: 32, costPerConversation: 23.42, adPreviewLink: 'https://facebook.com', fbLink: 'https://facebook.com', igLink: 'https://instagram.com', campaignName: '[LRM][TRAFEGO][PERFIL][CBO][NATAL]', campaignDetailsLink: `#/w/${workspaceId}/ads/campaign/c1` },
+                     { id: 'ad2', name: 'Reels: Branding Video V2', status: 'PAUSED', objective: 'OUTCOME_AWARENESS', spend: 299.23, impressions: 20569, clicks: 440, ctr: 2.1, cpm: 14.5, cpc: 0.68, roas: 1.5, cpa: 45.00, messages: 13, costPerConversation: 23.01, campaignName: '[INSTITUCIONAL][BRANDING][2024]', fbLink: 'https://facebook.com', igLink: 'https://instagram.com', campaignDetailsLink: `#/w/${workspaceId}/ads/campaign/c2` },
+                     { id: 'ad3', name: 'Carrossel: LAL 1%', status: 'ACTIVE', objective: 'OUTCOME_SALES', adPreviewLink: 'https://facebook.com', fbLink: 'https://facebook.com', spend: 500.00, impressions: 9500, clicks: 200, ctr: 2.1, cpm: 52.6, cpc: 2.50, roas: 5.5, cpa: 25.00, messages: 5, costPerConversation: 100, campaignName: '[CONVERSAO][LAL 1%][COMPRADORES]', campaignDetailsLink: `#/w/${workspaceId}/ads/campaign/c3` },
                      { id: 'ad4', name: 'Story: Teste Copy A', status: 'PAUSED', objective: 'OUTCOME_TRAFFIC', spend: 0, impressions: 0, clicks: 0, ctr: 0, cpm: 0, cpc: 0, roas: 0, cpa: 0, messages: 0, costPerConversation: 0, campaignName: '[TESTE][SEM ENTREGA]', campaignDetailsLink: `#/w/${workspaceId}/ads/campaign/c4` }
                  ];
              } else if (viewLevel === 'adset') {
@@ -180,7 +180,8 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
       let listFields = 'id,name,status';
       if (viewLevel === 'campaign') listFields += ',objective';
       if (viewLevel === 'adset') listFields += ',campaign{id,objective,name}'; // Added campaign ID for linking
-      if (viewLevel === 'ad') listFields += ',campaign{id,objective,name},preview_shareable_link'; // Request link for ads
+      // Updated: fetch effective_object_story_id and creative permalinks for FB/IG splitting
+      if (viewLevel === 'ad') listFields += ',campaign{id,objective,name},preview_shareable_link,effective_object_story_id,creative{instagram_permalink_url}'; 
 
       const p2 = new Promise<any>((resolve) => {
           window.FB.api(`/${accountId}/${levelPath}`, { 
@@ -277,6 +278,15 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
                       if (c.campaign.id) campaignDetailsLink = `#/w/${workspaceId}/ads/campaign/${c.campaign.id}`;
                   }
 
+                  // Determine Social Links
+                  // FB: Use effective_object_story_id to construct permalink or fallback to generic shareable link
+                  const fbLink = c.effective_object_story_id 
+                      ? `https://www.facebook.com/${c.effective_object_story_id}` 
+                      : c.preview_shareable_link;
+                  
+                  // IG: Use specific creative permalink
+                  const igLink = c.creative?.instagram_permalink_url;
+
                   return {
                       id: c.id,
                       name: c.name,
@@ -285,6 +295,8 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
                       status: c.status,
                       objective: objective,
                       adPreviewLink: c.preview_shareable_link || undefined,
+                      fbLink,
+                      igLink,
                       detailsLink: `#/w/${workspaceId}/ads/${viewLevel}/${c.id}`, // Build Hash Link
                       spend,
                       impressions,
