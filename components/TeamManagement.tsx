@@ -12,6 +12,164 @@ const MOCK_MEMBERS: TeamMember[] = [
     { id: '3', name: 'Beatriz Lima', email: 'bia@company.com', role: 'viewer', status: 'active', avatar: 'BL' }
 ];
 
+interface InviteMemberModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    onInvite: (email: string, role: 'admin' | 'editor' | 'viewer') => void;
+}
+
+const InviteMemberModal: React.FC<InviteMemberModalProps> = ({ isOpen, onClose, onInvite }) => {
+    const [email, setEmail] = useState('');
+    const [role, setRole] = useState<'admin' | 'editor' | 'viewer'>('editor');
+    const [isLoading, setIsLoading] = useState(false);
+    const [showSuccess, setShowSuccess] = useState(false);
+
+    // Reset state when opening
+    useEffect(() => {
+        if (isOpen) {
+            setEmail('');
+            setRole('editor');
+            setShowSuccess(false);
+            setIsLoading(false);
+        }
+    }, [isOpen]);
+
+    const handleSubmit = async () => {
+        if (!email) return;
+        setIsLoading(true);
+        // Simulate API call
+        await new Promise(r => setTimeout(r, 1000));
+        
+        onInvite(email, role);
+        setIsLoading(false);
+        setShowSuccess(true);
+        
+        setTimeout(() => {
+            setShowSuccess(false);
+            onClose();
+        }, 1500);
+    };
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            {/* Backdrop */}
+            <div className="absolute inset-0 bg-[#0a0812]/80 backdrop-blur-sm transition-all duration-300" onClick={onClose}></div>
+
+            {/* Modal Container */}
+            <div className="relative w-full max-w-[520px] bg-white dark:bg-[#1e1933] rounded-xl shadow-2xl border border-gray-200 dark:border-[#3b3267] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                
+                {/* Modal Header */}
+                <div className="flex items-start justify-between p-6 pb-2">
+                    <div className="flex flex-col gap-1">
+                        <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Convidar Novo Membro</h2>
+                        <p className="text-slate-500 dark:text-[#9b92c9] text-sm font-normal">
+                            Adicione colaboradores ao seu workspace do Andromeda Lab.
+                        </p>
+                    </div>
+                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:text-[#9b92c9] dark:hover:text-white transition-colors p-1 rounded-full hover:bg-gray-100 dark:hover:bg-white/10">
+                        <span className="material-symbols-outlined text-2xl">close</span>
+                    </button>
+                </div>
+
+                {/* Modal Body */}
+                <div className="flex flex-col gap-5 px-6 py-4">
+                    {/* Email Field */}
+                    <div className="flex flex-col gap-2">
+                        <label className="text-slate-700 dark:text-white text-sm font-medium leading-normal flex justify-between">
+                            Email do Membro
+                        </label>
+                        <div className="relative group">
+                            <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-[#9b92c9] select-none text-[20px]">mail</span>
+                            <input 
+                                className="flex w-full min-w-0 resize-none overflow-hidden rounded-lg text-slate-900 dark:text-white focus:outline-0 focus:ring-2 focus:ring-primary/50 border border-gray-300 dark:border-[#3b3267] bg-white dark:bg-[#151125] focus:border-primary h-12 placeholder:text-slate-400 dark:placeholder:text-[#9b92c9] pl-11 pr-4 text-base font-normal leading-normal transition-all" 
+                                placeholder="ex: colega@empresa.com" 
+                                type="email" 
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                            />
+                        </div>
+                    </div>
+
+                    {/* Role Dropdown */}
+                    <div className="flex flex-col gap-2">
+                        <label className="text-slate-700 dark:text-white text-sm font-medium leading-normal">Cargo / Permissão</label>
+                        <div className="relative">
+                            <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-[#9b92c9] select-none text-[20px]">badge</span>
+                            <select 
+                                className="flex w-full min-w-0 resize-none overflow-hidden rounded-lg text-slate-900 dark:text-white focus:outline-0 focus:ring-2 focus:ring-primary/50 border border-gray-300 dark:border-[#3b3267] bg-white dark:bg-[#151125] focus:border-primary h-12 pl-11 pr-10 text-base font-normal leading-normal appearance-none cursor-pointer transition-all"
+                                value={role}
+                                onChange={(e) => setRole(e.target.value as any)}
+                            >
+                                <option value="editor">Editor</option>
+                                <option value="viewer">Visualizador</option>
+                                <option value="admin">Administrador</option>
+                            </select>
+                            <span className="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 text-[#9b92c9] pointer-events-none text-[20px]">expand_more</span>
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-[#9b92c9] mt-1">
+                            Editores podem gerenciar campanhas e conexões. Visualizadores têm acesso apenas leitura.
+                        </p>
+                    </div>
+                </div>
+
+                {/* Modal Footer */}
+                <div className="p-6 pt-4 flex justify-end gap-3 bg-gray-50 dark:bg-[#1e1933]/50 border-t border-gray-100 dark:border-[#3b3267]/50">
+                    <button 
+                        onClick={onClose}
+                        className="flex min-w-[84px] cursor-pointer items-center justify-center rounded-lg h-10 px-4 bg-transparent border border-gray-300 dark:border-[#3b3267] text-slate-700 dark:text-white hover:bg-gray-100 dark:hover:bg-white/5 text-sm font-semibold transition-colors"
+                    >
+                        Cancelar
+                    </button>
+                    <button 
+                        onClick={handleSubmit}
+                        disabled={isLoading || !email}
+                        className="flex min-w-[84px] cursor-pointer items-center justify-center rounded-lg h-10 px-6 bg-primary hover:bg-primary-hover text-white text-sm font-bold shadow-lg shadow-primary/20 transition-all group disabled:opacity-70 disabled:cursor-not-allowed"
+                    >
+                        {isLoading ? (
+                            <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                        ) : (
+                            <span className="flex items-center gap-2">
+                                <span>Enviar Convite</span>
+                                <span className="material-symbols-outlined text-[18px] group-hover:translate-x-0.5 transition-transform">send</span>
+                            </span>
+                        )}
+                    </button>
+                </div>
+            </div>
+
+            {/* Success Toast */}
+            {showSuccess && (
+                <div className="fixed bottom-6 right-6 z-[60] animate-[slideIn_0.5s_ease-out]">
+                    <div className="flex items-center gap-4 bg-white dark:bg-[#252038] border border-green-500/20 shadow-xl rounded-lg p-4 pr-10 relative overflow-hidden">
+                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-green-500"></div>
+                        <div className="flex-shrink-0 w-10 h-10 rounded-full bg-green-500/10 flex items-center justify-center text-green-500">
+                            <span className="material-symbols-outlined">check_circle</span>
+                        </div>
+                        <div className="flex flex-col">
+                            <p className="text-slate-900 dark:text-white font-medium text-sm">Convite enviado!</p>
+                            <p className="text-slate-500 dark:text-[#9b92c9] text-xs">O email foi disparado com sucesso.</p>
+                        </div>
+                        <button onClick={() => setShowSuccess(false)} className="absolute top-2 right-2 text-slate-400 hover:text-slate-600 dark:text-[#9b92c9] hover:dark:text-white">
+                            <span className="material-symbols-outlined text-[16px]">close</span>
+                        </button>
+                    </div>
+                </div>
+            )}
+            <style>{`
+                @keyframes slideIn {
+                    from { transform: translateY(100%); opacity: 0; }
+                    to { transform: translateY(0); opacity: 1; }
+                }
+            `}</style>
+        </div>
+    );
+};
+
 interface EditMemberModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -195,12 +353,14 @@ export const TeamManagementPage = ({ workspaces }: { workspaces: Workspace[] }) 
     const { workspaceId } = useParams();
     const [members, setMembers] = useState<TeamMember[]>(MOCK_MEMBERS);
     const [selectedMember, setSelectedMember] = useState<TeamMember | null>(null);
-    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
+    const [toast, setToast] = useState<{ show: boolean; message: string } | null>(null);
 
     const handleEdit = (member: TeamMember) => {
         setSelectedMember(member);
-        setIsModalOpen(true);
+        setIsEditModalOpen(true);
     };
 
     const handleSaveMember = (updated: TeamMember) => {
@@ -210,8 +370,26 @@ export const TeamManagementPage = ({ workspaces }: { workspaces: Workspace[] }) 
     const handleDeleteMember = (id: string) => {
         if (confirm("Tem certeza que deseja remover este membro?")) {
             setMembers(prev => prev.filter(m => m.id !== id));
-            setIsModalOpen(false);
+            setIsEditModalOpen(false);
         }
+    };
+
+    const handleInviteMember = (email: string, role: 'admin' | 'editor' | 'viewer') => {
+        const newMember: TeamMember = {
+            id: Date.now().toString(),
+            name: email.split('@')[0], // Extract name from email as placeholder
+            email,
+            role,
+            status: 'pending',
+            avatar: '' // New invites don't have avatars yet
+        };
+        setMembers(prev => [newMember, ...prev]);
+    };
+
+    const handleResendInvite = (member: TeamMember) => {
+        // Simulate API call
+        setToast({ show: true, message: `Convite reenviado para ${member.email}` });
+        setTimeout(() => setToast(null), 3000);
     };
 
     const filteredMembers = members.filter(m => 
@@ -264,7 +442,10 @@ export const TeamManagementPage = ({ workspaces }: { workspaces: Workspace[] }) 
                             Gerencie quem tem acesso aos dados, permissões de análise e configurações deste workspace.
                         </p>
                     </div>
-                    <button className="flex items-center justify-center gap-2 bg-primary hover:bg-primary-dark text-white px-5 h-11 rounded-lg font-semibold text-sm transition-all shadow-lg shadow-primary/25 shrink-0">
+                    <button 
+                        onClick={() => setIsInviteModalOpen(true)}
+                        className="flex items-center justify-center gap-2 bg-primary hover:bg-primary-hover text-white px-5 h-11 rounded-lg font-semibold text-sm transition-all shadow-lg shadow-primary/25 shrink-0"
+                    >
                         <span className="material-symbols-outlined text-[20px]">add</span>
                         Convidar Membro
                     </button>
@@ -320,7 +501,7 @@ export const TeamManagementPage = ({ workspaces }: { workspaces: Workspace[] }) 
                                                         </div>
                                                     ) : (
                                                         <div className={`size-10 rounded-full flex items-center justify-center text-white font-bold text-sm ${member.role === 'viewer' ? 'bg-pink-600' : 'bg-gradient-to-br from-blue-500 to-primary'}`}>
-                                                            {member.avatar || member.name.charAt(0)}
+                                                            {member.avatar || member.name.charAt(0).toUpperCase()}
                                                         </div>
                                                     )}
                                                     <div className="flex flex-col">
@@ -346,8 +527,11 @@ export const TeamManagementPage = ({ workspaces }: { workspaces: Workspace[] }) 
                                             <td className="px-6 py-4 whitespace-nowrap text-right">
                                                 <div className="flex items-center justify-end gap-1">
                                                     {member.status === 'pending' && (
-                                                        <button className="text-xs font-medium text-primary hover:text-primary-dark hover:underline mr-2">
-                                                            Reenviar
+                                                        <button 
+                                                            onClick={() => handleResendInvite(member)}
+                                                            className="text-xs font-medium text-primary hover:text-primary-dark hover:underline mr-2"
+                                                        >
+                                                            Reenviar Convite
                                                         </button>
                                                     )}
                                                     <button 
@@ -390,7 +574,10 @@ export const TeamManagementPage = ({ workspaces }: { workspaces: Workspace[] }) 
                         <p className="text-gray-500 dark:text-text-secondary mb-8 max-w-sm mx-auto leading-relaxed">
                             Comece a colaborar convidando seus colegas para analisar dados e gerenciar campanhas neste workspace.
                         </p>
-                        <button className="flex items-center justify-center gap-2 bg-primary hover:bg-primary-dark text-white px-6 h-10 rounded-lg font-semibold text-sm transition-all shadow-lg shadow-primary/20">
+                        <button 
+                            onClick={() => setIsInviteModalOpen(true)}
+                            className="flex items-center justify-center gap-2 bg-primary hover:bg-primary-dark text-white px-6 h-10 rounded-lg font-semibold text-sm transition-all shadow-lg shadow-primary/20"
+                        >
                             <span className="material-symbols-outlined text-[20px]">mail</span>
                             Convidar o primeiro membro
                         </button>
@@ -398,13 +585,38 @@ export const TeamManagementPage = ({ workspaces }: { workspaces: Workspace[] }) 
                 )}
             </div>
 
-            {/* Render Modal */}
+            {/* Page Toast */}
+            {toast && (
+                <div className="fixed bottom-6 right-6 z-[60] animate-in slide-in-from-bottom-5 fade-in duration-300">
+                    <div className="flex items-center gap-4 bg-white dark:bg-[#252038] border border-green-500/20 shadow-xl rounded-lg p-4 pr-10 relative overflow-hidden">
+                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-green-500"></div>
+                        <div className="flex-shrink-0 w-10 h-10 rounded-full bg-green-500/10 flex items-center justify-center text-green-500">
+                            <span className="material-symbols-outlined">check_circle</span>
+                        </div>
+                        <div className="flex flex-col">
+                            <p className="text-slate-900 dark:text-white font-medium text-sm">{toast.message}</p>
+                        </div>
+                        <button onClick={() => setToast(null)} className="absolute top-2 right-2 text-slate-400 hover:text-slate-600 dark:text-[#9b92c9] hover:dark:text-white">
+                            <span className="material-symbols-outlined text-[16px]">close</span>
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Render Edit Modal */}
             <EditMemberModal 
-                isOpen={isModalOpen}
-                onClose={() => setIsModalOpen(false)}
+                isOpen={isEditModalOpen}
+                onClose={() => setIsEditModalOpen(false)}
                 member={selectedMember}
                 onSave={handleSaveMember}
                 onDelete={handleDeleteMember}
+            />
+
+            {/* Render Invite Modal */}
+            <InviteMemberModal 
+                isOpen={isInviteModalOpen}
+                onClose={() => setIsInviteModalOpen(false)}
+                onInvite={handleInviteMember}
             />
         </AppShell>
     );

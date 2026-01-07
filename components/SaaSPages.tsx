@@ -373,18 +373,34 @@ const AdminMetaSetup: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
 // --- Integrations Page ---
 export const IntegrationsPage: React.FC = () => {
-    const [config, setConfig] = useState<AdminConfig>({ appId: '', isSecretSet: false, redirectUri: '', appDomain: '' });
+    const [config, setConfig] = useState<AdminConfig | null>(null);
     const [viewMode, setViewMode] = useState<'list' | 'setup'>('list');
+    const [isSaving, setIsSaving] = useState(false);
 
     useEffect(() => {
         const load = async () => {
             const c = await SecureKV.getMetaConfig();
-            if (c) {
-                setConfig(c);
-            }
+            setConfig(c);
         };
         load();
-    }, [viewMode]); // Reload config when switching back to list
+        // Listener for config changes
+        const handler = () => load();
+        window.addEventListener('sys_config_change', handler);
+        return () => window.removeEventListener('sys_config_change', handler);
+    }, [viewMode]);
+
+    const handleDisconnect = async () => {
+        if(confirm("Tem certeza? Isso interromperá a sincronização de dados.")) {
+            await SecureKV.saveMetaConfig({ appId: '', appSecret: '' });
+            setConfig(null);
+            window.dispatchEvent(new Event('sys_config_change'));
+        }
+    };
+
+    const handleSaveMock = () => {
+        setIsSaving(true);
+        setTimeout(() => setIsSaving(false), 800);
+    };
 
     if (viewMode === 'setup') {
         return (
@@ -394,37 +410,219 @@ export const IntegrationsPage: React.FC = () => {
         );
     }
 
+    const isConnected = !!config?.appId;
+
     return (
         <AppShell>
-            <div className="max-w-5xl mx-auto py-12 px-6">
-                <div className="mb-12">
-                    <h1 className="text-3xl font-black text-slate-900 dark:text-white mb-2">Integrações Globais</h1>
-                    <p className="text-text-secondary">Configure os conectores de API que alimentarão seus workspaces.</p>
+            <div className="max-w-5xl mx-auto flex flex-col gap-8 pb-20 p-6 md:p-10">
+                <div className="flex flex-col gap-3">
+                    <div className="flex justify-between items-start flex-wrap gap-4">
+                        <div>
+                            <h1 className="text-white text-3xl md:text-4xl font-black leading-tight tracking-[-0.033em] mb-2">Integrações</h1>
+                            <p className="text-text-secondary text-base font-normal max-w-2xl">
+                                Gerencie as conexões com plataformas de anúncios para centralizar sua análise de dados.
+                            </p>
+                        </div>
+                        <button className="bg-primary hover:bg-primary-hover text-white text-sm font-bold py-2.5 px-5 rounded-lg transition-colors flex items-center gap-2 shadow-lg shadow-primary/20">
+                            <span className="material-symbols-outlined text-[20px]">add</span>
+                            Nova Conexão
+                        </button>
+                    </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <Card className="p-6 relative overflow-hidden group border-primary/20 bg-primary/5">
-                        <div className="absolute top-4 right-4"><Badge variant={config.appId ? 'success' : 'gray'}>{config.appId ? 'ATIVO' : 'INATIVO'}</Badge></div>
-                        <div className="w-12 h-12 bg-[#1877F2] rounded-lg flex items-center justify-center text-white text-2xl mb-4 shadow-lg">
-                            <span className="material-symbols-outlined">ads_click</span>
+                {/* Stats Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="flex flex-col gap-1 rounded-xl p-5 border border-[#3b3267] bg-[#1f1b33]/30">
+                        <div className="flex items-center gap-2 mb-1">
+                            <span className="material-symbols-outlined text-text-secondary text-[20px]">hub</span>
+                            <p className="text-text-secondary text-sm font-medium">Total Disponível</p>
                         </div>
-                        <h3 className="text-xl font-bold text-white mb-2">Meta Ads</h3>
-                        <p className="text-sm text-text-secondary mb-6">Conecte-se à Graph API para extrair campanhas, conjuntos e anúncios.</p>
-                        <Button onClick={() => setViewMode('setup')}>
-                            Gerenciar Conexão
-                        </Button>
-                    </Card>
-
-                    <Card className="p-6 relative overflow-hidden opacity-60">
-                        <div className="absolute top-4 right-4"><Badge variant="gray">EM BREVE</Badge></div>
-                        <div className="w-12 h-12 bg-slate-700 rounded-lg flex items-center justify-center text-white text-2xl mb-4">
-                            <span className="material-symbols-outlined">analytics</span>
+                        <p className="text-white tracking-tight text-2xl font-bold">2</p>
+                    </div>
+                    <div className="flex flex-col gap-1 rounded-xl p-5 border border-green-900/50 bg-green-900/10">
+                        <div className="flex items-center gap-2 mb-1">
+                            <span className="material-symbols-outlined text-green-400 text-[20px]">check_circle</span>
+                            <p className="text-green-400 text-sm font-medium">Conexões Ativas</p>
                         </div>
-                        <h3 className="text-xl font-bold text-white mb-2">Google Ads</h3>
-                        <p className="text-sm text-text-secondary mb-6">Integração futura para análise de Search e Youtube Ads.</p>
-                        <Button disabled variant="secondary">Indisponível</Button>
-                    </Card>
+                        <p className="text-white tracking-tight text-2xl font-bold">{isConnected ? 1 : 0}</p>
+                    </div>
+                    <div className="flex flex-col gap-1 rounded-xl p-5 border border-[#3b3267] bg-[#1f1b33]/30">
+                        <div className="flex items-center gap-2 mb-1">
+                            <span className="material-symbols-outlined text-text-secondary text-[20px]">link_off</span>
+                            <p className="text-text-secondary text-sm font-medium">Não Conectados</p>
+                        </div>
+                        <p className="text-white tracking-tight text-2xl font-bold">{isConnected ? 1 : 2}</p>
+                    </div>
                 </div>
+
+                {/* Active Configuration (Visible if Connected) */}
+                {isConnected && (
+                    <section className="flex flex-col gap-4 animate-in fade-in slide-in-from-bottom-2">
+                        <h3 className="text-white text-lg font-bold">Configuração Ativa</h3>
+                        <div className="w-full bg-[#1f1b33] border border-border-dark rounded-xl overflow-hidden shadow-sm">
+                            <div className="p-6 md:p-8 flex flex-col md:flex-row gap-8">
+                                <div className="flex flex-col gap-4 min-w-[200px] md:w-1/3">
+                                    <div className="size-16 rounded-xl bg-[#0668E1]/10 flex items-center justify-center p-2 shadow-sm border border-[#0668E1]/20">
+                                        <span className="material-symbols-outlined text-[36px] text-[#0668E1] icon-fill">campaign</span>
+                                    </div>
+                                    <div>
+                                        <h4 className="text-white text-xl font-bold">Meta Ads</h4>
+                                        <div className="flex items-center gap-2 mt-2">
+                                            <span className="relative flex h-2.5 w-2.5">
+                                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                                                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500"></span>
+                                            </span>
+                                            <span className="text-green-400 text-xs font-semibold uppercase tracking-wider">Conectado</span>
+                                        </div>
+                                    </div>
+                                    <p className="text-text-secondary text-sm">
+                                        Fonte primária de dados. Sincronização automática de campanhas, conjuntos de anúncios e anúncios criativos.
+                                    </p>
+                                </div>
+                                <div className="flex-1 flex flex-col gap-6 border-t md:border-t-0 md:border-l border-border-dark pt-6 md:pt-0 md:pl-8 justify-center">
+                                    <div className="flex justify-between items-center bg-[#292348]/50 p-4 rounded-lg border border-[#3b3267]">
+                                        <div className="flex items-center gap-4">
+                                            <div className="size-10 rounded-full bg-blue-600/20 text-blue-400 flex items-center justify-center shrink-0">
+                                                <span className="material-symbols-outlined text-[20px]">person</span>
+                                            </div>
+                                            <div className="flex flex-col">
+                                                <span className="text-xs text-text-secondary uppercase tracking-wider font-bold mb-0.5">Conta Conectada</span>
+                                                <span className="text-sm font-medium text-white">Ricardo M. (Business Manager)</span>
+                                                <span className="text-xs text-text-secondary mt-0.5">ID: {config?.appId}</span>
+                                            </div>
+                                        </div>
+                                        <div className="flex flex-col items-end gap-1">
+                                            <span className="text-xs text-green-400 font-medium flex items-center gap-1">
+                                                <span className="material-symbols-outlined text-[14px]">sync</span>
+                                                Sincronizado
+                                            </span>
+                                            <span className="text-[10px] text-text-secondary">Há 5 min</span>
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                        <div className="flex flex-col gap-2">
+                                            <label className="text-xs font-bold text-text-secondary uppercase tracking-wider">Conta de Anúncios</label>
+                                            <div className="relative">
+                                                <select className="w-full bg-[#141122] border border-[#3b3267] text-white text-sm rounded-lg focus:ring-primary focus:border-primary block p-2.5 appearance-none">
+                                                    <option>Andromeda Lab (Act_9928...)</option>
+                                                    <option>Client A - Ecom</option>
+                                                    <option>Client B - Lead Gen</option>
+                                                </select>
+                                                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-text-secondary">
+                                                    <span className="material-symbols-outlined">expand_more</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="flex flex-col gap-2">
+                                            <label className="text-xs font-bold text-text-secondary uppercase tracking-wider">Janela de Atribuição</label>
+                                            <div className="relative">
+                                                <select className="w-full bg-[#141122] border border-[#3b3267] text-white text-sm rounded-lg focus:ring-primary focus:border-primary block p-2.5 appearance-none">
+                                                    <option>7 dias clique / 1 dia visualização</option>
+                                                    <option>1 dia clique</option>
+                                                    <option>28 dias clique (Legacy)</option>
+                                                </select>
+                                                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-text-secondary">
+                                                    <span className="material-symbols-outlined">expand_more</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="flex justify-end gap-3 mt-2">
+                                        <button 
+                                            onClick={handleDisconnect}
+                                            className="px-4 py-2 text-sm font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors"
+                                        >
+                                            Desconectar
+                                        </button>
+                                        <button 
+                                            onClick={handleSaveMock}
+                                            className="px-4 py-2 text-sm font-bold text-white bg-primary rounded-lg hover:bg-primary-hover shadow-lg shadow-primary/25 transition-all flex items-center gap-2"
+                                        >
+                                            {isSaving ? (
+                                                <span className="material-symbols-outlined text-[18px] animate-spin">sync</span>
+                                            ) : (
+                                                <span className="material-symbols-outlined text-[18px]">save</span>
+                                            )}
+                                            {isSaving ? 'Salvando...' : 'Salvar Alterações'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                )}
+
+                {/* Available Integrations */}
+                <section className="flex flex-col gap-4">
+                    <div className="flex items-center justify-between">
+                        <h3 className="text-white text-lg font-bold">Integrações Disponíveis</h3>
+                        <div className="relative hidden sm:block">
+                            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary text-[20px]">search</span>
+                            <input className="bg-[#141122] border border-[#3b3267] text-white text-sm rounded-lg focus:ring-primary focus:border-primary block w-64 pl-10 p-2 placeholder-text-secondary/50" placeholder="Buscar integração..." type="text"/>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                        {/* Google Ads */}
+                        <div className="group relative flex flex-col justify-between rounded-xl border border-border-dark bg-[#1f1b33] p-6 transition-all hover:border-[#3b3267] hover:bg-[#25203d]">
+                            <div className="flex flex-col gap-4">
+                                <div className="flex justify-between items-start">
+                                    <div className="size-12 rounded-lg bg-white p-2 flex items-center justify-center">
+                                        <img alt="Google Ads Logo" className="w-full h-full object-contain" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB5PMuPxtuLDBNVPuUAUJln2xRrRDu83ZNMDemg2c3PlS9SLm3WE8vsP7Pk23JQkF660-xHhH_MZxZRek7FOdlv37hSJQT4Gb9_RX5amHGZeemtO9TN-TwYajBnV6cSc2c4WaAspzZ0JCmuuhkpHQrgQCjp99gt80QTB5lGhtsMSHDemafgZCqCWsdWt49YYdU65SKK2MMdze1UAiMdyYZj-1Js-opBOjQdLI_IzC-vFEJvDKn_VB4tzZO3hybUDyAOgGRnmo88sv4"/>
+                                    </div>
+                                    <div className="px-2.5 py-1 rounded-full bg-white/5 border border-white/10">
+                                        <p className="text-text-secondary text-xs font-bold uppercase tracking-wider">Não Conectado</p>
+                                    </div>
+                                </div>
+                                <div>
+                                    <h4 className="text-white text-lg font-bold mb-1">Google Ads</h4>
+                                    <p className="text-text-secondary text-sm leading-relaxed">
+                                        Importe dados de campanhas Search, Display e YouTube para análise cruzada.
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="mt-6 pt-4 border-t border-white/5 flex items-center justify-end">
+                                <button disabled className="w-full py-2 px-4 rounded-lg bg-white/5 text-text-secondary border border-white/10 text-sm font-bold cursor-not-allowed opacity-60">
+                                    Em Breve
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Meta Ads */}
+                        <div className={`group relative flex flex-col justify-between rounded-xl border ${isConnected ? 'border-[#0668E1]/30 hover:border-[#0668E1]/50' : 'border-border-dark hover:border-[#3b3267]'} bg-[#1f1b33] p-6 transition-all hover:bg-[#25203d]`}>
+                            <div className="flex flex-col gap-4">
+                                <div className="flex justify-between items-start">
+                                    <div className="size-12 rounded-lg bg-[#0668E1]/10 flex items-center justify-center text-[#0668E1] border border-[#0668E1]/20">
+                                        <span className="material-symbols-outlined text-[32px] icon-fill">campaign</span>
+                                    </div>
+                                    <div className={`px-2.5 py-1 rounded-full ${isConnected ? 'bg-green-500/10 border border-green-500/20' : 'bg-white/5 border border-white/10'}`}>
+                                        <p className={`${isConnected ? 'text-green-400' : 'text-text-secondary'} text-xs font-bold uppercase tracking-wider`}>{isConnected ? 'Conectado' : 'Não Conectado'}</p>
+                                    </div>
+                                </div>
+                                <div>
+                                    <h4 className="text-white text-lg font-bold mb-1">Meta Ads</h4>
+                                    <p className="text-text-secondary text-sm leading-relaxed">
+                                        Gerencie sua conexão principal, tokens de acesso e contas de anúncio vinculadas.
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="mt-6 pt-4 border-t border-white/5 flex items-center justify-between">
+                                {isConnected ? (
+                                    <>
+                                        <span className="text-xs text-text-secondary flex items-center gap-1">
+                                            <span className="size-2 bg-green-500 rounded-full inline-block"></span>
+                                            Ativo
+                                        </span>
+                                        <button onClick={() => setViewMode('setup')} className="text-sm font-bold text-white hover:text-primary transition-colors">Gerenciar</button>
+                                    </>
+                                ) : (
+                                    <button onClick={() => setViewMode('setup')} className="w-full py-2 px-4 rounded-lg bg-white/5 text-white border border-white/10 hover:bg-white/10 text-sm font-bold transition-colors">
+                                        Conectar
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </section>
             </div>
         </AppShell>
     );
