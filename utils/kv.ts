@@ -1,15 +1,95 @@
 
-import type { UserProfile, CustomReport } from '../types';
+import type { UserProfile, CustomReport, DashboardTemplate } from '../types';
 
 const KEYS = {
   META_CONFIG: 'sys:meta_config',
   TOKEN_PREFIX: 'wk:meta_token:',
   CONTEXT_PREFIX: 'wk:meta_context:',
+  TEMPLATE_PREF_PREFIX: 'wk:template:',
   MASTER_PWD: 'sys:master_hash', // Simulated hash storage
   AUTH_SESSION: 'sys:auth_session',
   USER_PROFILE: 'sys:user_profile',
   REPORTS_PREFIX: 'wk:reports:'
 };
+
+// --- TEMPLATE DEFINITIONS ---
+export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
+    {
+        id: 'tpl_general',
+        name: 'Visão Geral (Padrão)',
+        description: 'Um mix equilibrado de investimento, tráfego e conversões principais.',
+        category: 'general',
+        icon: 'dashboard',
+        kpis: [
+            { key: 'spend', label: 'Investimento', icon: 'payments', format: 'currency', trendCheck: 'low_is_good' },
+            { key: 'roas', label: 'ROAS', icon: 'monitoring', format: 'multiplier', trendCheck: 'high_is_good' },
+            { key: 'purchases', label: 'Vendas', icon: 'shopping_cart', format: 'number', trendCheck: 'high_is_good' },
+            { key: 'cpa', label: 'CPA', icon: 'savings', format: 'currency', trendCheck: 'low_is_good' },
+            { key: 'ctr', label: 'CTR', icon: 'touch_app', format: 'percent', trendCheck: 'high_is_good' },
+            { key: 'cpc', label: 'CPC', icon: 'ads_click', format: 'currency', trendCheck: 'low_is_good' }
+        ]
+    },
+    {
+        id: 'tpl_ecom',
+        name: 'E-commerce & Vendas',
+        description: 'Focado em retorno financeiro, ROAS e custo por compra.',
+        category: 'ecom',
+        icon: 'storefront',
+        kpis: [
+            { key: 'roas', label: 'ROAS', icon: 'monetization_on', format: 'multiplier', trendCheck: 'high_is_good' },
+            { key: 'purchases', label: 'Compras', icon: 'shopping_bag', format: 'number', trendCheck: 'high_is_good' },
+            { key: 'cpa', label: 'Custo por Compra', icon: 'sell', format: 'currency', trendCheck: 'low_is_good' },
+            { key: 'spend', label: 'Valor Gasto', icon: 'wallet', format: 'currency', trendCheck: 'low_is_good' },
+            { key: 'aov', label: 'Ticket Médio', icon: 'receipt_long', format: 'currency', trendCheck: 'high_is_good' }, // Requires custom calculation support
+            { key: 'add_to_cart', label: 'Add. Carrinho', icon: 'add_shopping_cart', format: 'number', trendCheck: 'high_is_good' }
+        ]
+    },
+    {
+        id: 'tpl_leads',
+        name: 'Geração de Leads',
+        description: 'Monitoramento de cadastros, custo por lead e volume de contatos.',
+        category: 'leads',
+        icon: 'contact_mail',
+        kpis: [
+            { key: 'leads', label: 'Leads Totais', icon: 'group_add', format: 'number', trendCheck: 'high_is_good' },
+            { key: 'cpl', label: 'Custo por Lead', icon: 'money_off', format: 'currency', trendCheck: 'low_is_good' },
+            { key: 'messages', label: 'Mensagens Iniciadas', icon: 'chat', format: 'number', trendCheck: 'high_is_good' },
+            { key: 'cost_per_message', label: 'Custo por Msg', icon: 'forum', format: 'currency', trendCheck: 'low_is_good' },
+            { key: 'ctr', label: 'CTR', icon: 'percent', format: 'percent', trendCheck: 'high_is_good' },
+            { key: 'spend', label: 'Investimento', icon: 'payments', format: 'currency', trendCheck: 'low_is_good' }
+        ]
+    },
+    {
+        id: 'tpl_awareness',
+        name: 'Branding & Alcance',
+        description: 'Foco em visibilidade, frequência e impressões.',
+        category: 'awareness',
+        icon: 'campaign',
+        kpis: [
+            { key: 'impressions', label: 'Impressões', icon: 'visibility', format: 'number', trendCheck: 'high_is_good' },
+            { key: 'cpm', label: 'CPM', icon: 'price_change', format: 'currency', trendCheck: 'low_is_good' },
+            { key: 'frequency', label: 'Frequência', icon: 'repeat', format: 'multiplier', trendCheck: 'low_is_good' }, // Need logic for ideal frequency
+            { key: 'spend', label: 'Investimento', icon: 'payments', format: 'currency', trendCheck: 'low_is_good' },
+            { key: 'clicks', label: 'Cliques', icon: 'mouse', format: 'number', trendCheck: 'high_is_good' },
+            { key: 'cpc', label: 'CPC', icon: 'ads_click', format: 'currency', trendCheck: 'low_is_good' }
+        ]
+    },
+    {
+        id: 'tpl_traffic',
+        name: 'Tráfego do Site',
+        description: 'Acompanhe CTR, CPC e volume de visitantes únicos.',
+        category: 'traffic',
+        icon: 'ads_click',
+        kpis: [
+            { key: 'clicks', label: 'Cliques no Link', icon: 'mouse', format: 'number', trendCheck: 'high_is_good' },
+            { key: 'ctr', label: 'CTR (Taxa de Clique)', icon: 'touch_app', format: 'percent', trendCheck: 'high_is_good' },
+            { key: 'cpc', label: 'CPC Médio', icon: 'price_check', format: 'currency', trendCheck: 'low_is_good' },
+            { key: 'spend', label: 'Investimento', icon: 'payments', format: 'currency', trendCheck: 'low_is_good' },
+            { key: 'cpm', label: 'CPM', icon: 'analytics', format: 'currency', trendCheck: 'low_is_good' },
+            { key: 'impressions', label: 'Impressões', icon: 'visibility', format: 'number', trendCheck: 'high_is_good' }
+        ]
+    }
+];
 
 const DEFAULT_REPORTS: CustomReport[] = [
     {
@@ -75,6 +155,17 @@ export const SecureKV = {
   getWorkspaceContext: (workspaceId: string) => {
     const raw = localStorage.getItem(`${KEYS.CONTEXT_PREFIX}${workspaceId}`);
     return raw ? JSON.parse(raw) : null;
+  },
+
+  // --- Template Management ---
+  saveWorkspaceTemplate: (workspaceId: string, templateId: string) => {
+      localStorage.setItem(`${KEYS.TEMPLATE_PREF_PREFIX}${workspaceId}`, templateId);
+  },
+
+  getWorkspaceTemplate: (workspaceId: string): DashboardTemplate => {
+      const templateId = localStorage.getItem(`${KEYS.TEMPLATE_PREF_PREFIX}${workspaceId}`);
+      const template = DASHBOARD_TEMPLATES.find(t => t.id === templateId);
+      return template || DASHBOARD_TEMPLATES[0]; // Default to General
   },
 
   // --- Auth Utilities ---

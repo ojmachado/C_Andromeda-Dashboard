@@ -13,7 +13,8 @@ import { TeamManagementPage } from './components/TeamManagement';
 import { AccountSettingsPage } from './components/AccountSettingsPage';
 import { LoginPage } from './components/LoginPage';
 import { SharedReportPage } from './components/SharedReportPage';
-import type { Workspace, InsightData, DateRangePreset, APIGeneralInsights } from './types';
+import { DashboardTemplateSelector } from './components/DashboardTemplates';
+import type { Workspace, InsightData, DateRangePreset, APIGeneralInsights, DashboardTemplate, KpiConfig } from './types';
 
 declare global {
   interface Window {
@@ -44,6 +45,10 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
   const [campaigns, setCampaigns] = useState<InsightData[]>([]);
   const [trendData, setTrendData] = useState<{date: string, value: number}[]>([]);
   
+  // Template State
+  const [currentTemplate, setCurrentTemplate] = useState<DashboardTemplate>(SecureKV.getWorkspaceTemplate(workspaceId || ''));
+  const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
+
   // Filter States
   const [dateRange, setDateRange] = useState<DateRangePreset>('last_30d');
   const [viewLevel, setViewLevel] = useState<ViewLevel>('campaign'); // Level Filter State
@@ -58,6 +63,22 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
   
   // Request tracking to prevent race conditions
   const requestRef = useRef<number>(0);
+
+  // Load Template Preference on Mount
+  useEffect(() => {
+      if (workspaceId) {
+          const tpl = SecureKV.getWorkspaceTemplate(workspaceId);
+          setCurrentTemplate(tpl);
+      }
+  }, [workspaceId]);
+
+  const handleTemplateChange = (template: DashboardTemplate) => {
+      if (workspaceId) {
+          SecureKV.saveWorkspaceTemplate(workspaceId, template.id);
+          setCurrentTemplate(template);
+          setIsTemplateModalOpen(false);
+      }
+  };
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -116,7 +137,9 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
                  purchase_roas: [{ value: 3.8 }],
                  actions: [
                      { action_type: 'purchase', value: 24 },
-                     { action_type: 'onsite_conversion.messaging_conversation_started_7d', value: 45 }
+                     { action_type: 'onsite_conversion.messaging_conversation_started_7d', value: 45 },
+                     { action_type: 'lead', value: 89 },
+                     { action_type: 'add_to_cart', value: 156 }
                  ]
              });
 
@@ -356,24 +379,126 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
     fetchData();
   };
 
-  // Extract total metrics helper
-  const getActionValue = (actions: any[], type: string) => {
-      if (!actions) return 0;
-      const action = actions.find((a: any) => a.action_type === type);
-      return action ? parseFloat(action.value) : 0;
+  // Helper: Get value for dynamic KPI
+  const getKpiValue = (key: string): { value: string, subValue?: string, trend: 'up' | 'down' | 'neutral' } => {
+      const getAction = (type: string) => {
+          if (!stats?.actions) return 0;
+          const a = stats.actions.find((x: any) => x.action_type === type);
+          return a ? parseFloat(a.value) : 0;
+      };
+
+      let val = 0;
+      let trend: 'up' | 'down' | 'neutral' = 'neutral';
+      let subValue = undefined;
+
+      switch(key) {
+          case 'spend':
+              val = parseFloat(stats?.spend || '0');
+              trend = 'up';
+              subValue = '+12.5%';
+              break;
+          case 'roas':
+              val = parseFloat(stats?.purchase_roas?.[0]?.value || '0');
+              trend = val > 2 ? 'up' : 'down';
+              subValue = val > 2 ? 'Saudável' : 'Atenção';
+              break;
+          case 'purchases':
+              val = getAction('purchase') || getAction('offsite_conversion.fb_pixel_purchase');
+              trend = 'up';
+              break;
+          case 'leads':
+              val = getAction('lead') || getAction('on_facebook_lead');
+              trend = 'up';
+              break;
+          case 'add_to_cart':
+              val = getAction('add_to_cart') || getAction('offsite_conversion.fb_pixel_add_to_cart');
+              trend = 'up';
+              break;
+          case 'messages':
+              val = getAction('onsite_conversion.messaging_conversation_started_7d') || getAction('messaging_conversation_started_7d');
+              trend = 'up';
+              break;
+          case 'cpa': 
+              {
+                  const sales = getAction('purchase') || getAction('offsite_conversion.fb_pixel_purchase');
+                  const spend = parseFloat(stats?.spend || '0');
+                  val = sales > 0 ? spend / sales : 0;
+                  trend = val > 50 ? 'down' : 'up';
+              }
+              break;
+          case 'cpl':
+              {
+                  const leads = getAction('lead') || getAction('on_facebook_lead');
+                  const spend = parseFloat(stats?.spend || '0');
+                  val = leads > 0 ? spend / leads : 0;
+                  trend = 'neutral';
+              }
+              break;
+          case 'cost_per_message':
+              {
+                  const msgs = getAction('onsite_conversion.messaging_conversation_started_7d') || getAction('messaging_conversation_started_7d');
+                  const spend = parseFloat(stats?.spend || '0');
+                  val = msgs > 0 ? spend / msgs : 0;
+                  trend = 'neutral';
+              }
+              break;
+          case 'impressions':
+              val = parseInt(stats?.impressions || '0');
+              trend = 'up';
+              break;
+          case 'clicks':
+              val = parseInt(stats?.clicks || '0');
+              trend = 'neutral';
+              break;
+          case 'ctr':
+              val = parseFloat(stats?.ctr || '0');
+              trend = val > 1 ? 'up' : 'down';
+              break;
+          case 'cpc':
+              val = parseFloat(stats?.cpc || '0');
+              trend = 'neutral';
+              break;
+          case 'cpm':
+              val = parseFloat(stats?.cpm || '0');
+              trend = 'down';
+              break;
+          case 'frequency':
+              // Frequency isn't usually in overview without special query, using mock fallback or approximation
+              const impr = parseInt(stats?.impressions || '0');
+              const reach = parseInt(stats?.reach || impr * 0.8); // approximation if reach missing
+              val = reach > 0 ? impr / reach : 1;
+              break;
+          case 'aov':
+              {
+                  // Mock AOV or try to calculate if value exists
+                  val = 0; // Not easily available without action values breakdown in this context
+              }
+              break;
+          default:
+              val = 0;
+      }
+
+      // Formatting
+      const kpiConfig = currentTemplate.kpis.find(k => k.key === key);
+      let formatted = val.toString();
+      
+      if (kpiConfig?.format === 'currency') formatted = val.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
+      else if (kpiConfig?.format === 'percent') formatted = `${val.toFixed(2)}%`;
+      else if (kpiConfig?.format === 'multiplier') formatted = `${val.toFixed(2)}x`;
+      else if (kpiConfig?.format === 'number') formatted = val.toLocaleString('pt-BR');
+
+      // Adjust trend color logic based on config
+      if (kpiConfig?.trendCheck) {
+          if (kpiConfig.trendCheck === 'low_is_good') {
+              // Inverse logic (e.g., CPA, CPM)
+              // This is a simple visual toggle, in a real app would compare to prev period
+              if (trend === 'up') trend = 'down'; 
+              else if (trend === 'down') trend = 'up';
+          }
+      }
+
+      return { value: formatted, subValue, trend };
   };
-  
-  const totalSales = getActionValue(stats?.actions, 'purchase') || getActionValue(stats?.actions, 'offsite_conversion.fb_pixel_purchase');
-  
-  // Total Messages: Check both keys
-  const totalMessages = 
-      getActionValue(stats?.actions, 'onsite_conversion.messaging_conversation_started_7d') || 
-      getActionValue(stats?.actions, 'messaging_conversation_started_7d');
-  
-  const totalSpend = parseFloat(stats?.spend || 0);
-  const globalRoas = totalSpend > 0 && stats?.purchase_roas ? parseFloat(stats.purchase_roas[0]?.value || 0) : 0;
-  const globalCpa = totalSales > 0 ? totalSpend / totalSales : 0;
-  const globalCostPerConversation = totalMessages > 0 ? totalSpend / totalMessages : 0;
 
   // Handle Date Filter Click
   const handleDatePreset = (preset: DateRangePreset) => {
@@ -432,7 +557,17 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
                 {/* Title & Status */}
                 <div className="flex items-center gap-4">
                     <div>
-                        <h1 className="text-3xl font-black text-slate-900 dark:text-white">Dashboard do Workspace</h1>
+                        <div className="flex items-center gap-2">
+                            <h1 className="text-3xl font-black text-slate-900 dark:text-white">Dashboard</h1>
+                            <button 
+                                onClick={() => setIsTemplateModalOpen(true)}
+                                className="px-2 py-1 rounded bg-gray-100 dark:bg-white/5 border border-gray-200 dark:border-white/10 hover:bg-gray-200 dark:hover:bg-white/10 transition-colors flex items-center gap-1.5 group"
+                                title="Alterar Layout do Dashboard"
+                            >
+                                <span className="material-symbols-outlined text-[16px] text-primary group-hover:scale-110 transition-transform">dashboard_customize</span>
+                                <span className="text-[10px] font-bold text-slate-600 dark:text-text-secondary uppercase tracking-wider">{currentTemplate.name}</span>
+                            </button>
+                        </div>
                         <p className="text-text-secondary text-sm">Visão unificada de performance do Meta Ads.</p>
                     </div>
                     {/* Enhanced Status Indicator */}
@@ -573,54 +708,22 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
                 </div>
             </div>
             
-            {/* KPIs */}
+            {/* Dynamic KPIs based on Template */}
             <KpiGrid>
-                <KpiCard 
-                    label="Investimento" 
-                    value={parseFloat(stats?.spend || 0).toLocaleString('pt-BR', {style:'currency', currency:'BRL'})} 
-                    trend="up"
-                    subValue="+12.5%"
-                    icon="payments"
-                    isLoading={isLoading && !isRefreshing} 
-                />
-                 {/* Mensagens KPI */}
-                <KpiCard 
-                    label="Conversas Iniciadas" 
-                    value={totalMessages.toLocaleString()} 
-                    trend="up"
-                    icon="chat"
-                    isLoading={isLoading && !isRefreshing} 
-                />
-                 {/* Custo por Conversa KPI */}
-                <KpiCard 
-                    label="Custo por Conversa" 
-                    value={globalCostPerConversation.toLocaleString('pt-BR', {style:'currency', currency:'BRL'})} 
-                    trend={globalCostPerConversation > 10 ? 'down' : 'up'}
-                    icon="savings"
-                    isLoading={isLoading && !isRefreshing} 
-                />
-                <KpiCard 
-                    label="Vendas (Purchases)" 
-                    value={totalSales.toString()} 
-                    trend="up"
-                    subValue="+8.2%"
-                    icon="shopping_cart"
-                    isLoading={isLoading && !isRefreshing} 
-                />
-                <KpiCard 
-                    label="ROAS" 
-                    value={`${globalRoas.toFixed(2)}x`} 
-                    subValue={globalRoas > 2 ? 'Saudável' : 'Atenção'}
-                    trend={globalRoas > 2 ? 'up' : 'down'}
-                    icon="monitoring"
-                    isLoading={isLoading && !isRefreshing} 
-                />
-                 <KpiCard 
-                    label="CTR" 
-                    value={`${parseFloat(stats?.ctr || 0).toFixed(2)}%`} 
-                    icon="touch_app"
-                    isLoading={isLoading && !isRefreshing} 
-                />
+                {currentTemplate.kpis.map((kpi: KpiConfig) => {
+                    const data = getKpiValue(kpi.key);
+                    return (
+                        <KpiCard 
+                            key={kpi.key}
+                            label={kpi.label} 
+                            value={data.value} 
+                            trend={data.trend}
+                            subValue={data.subValue}
+                            icon={kpi.icon}
+                            isLoading={isLoading && !isRefreshing} 
+                        />
+                    );
+                })}
             </KpiGrid>
 
             {/* Trend Chart */}
@@ -670,6 +773,20 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
                     <Button variant="ghost" onClick={() => setIsDateModalOpen(false)}>Cancelar</Button>
                     <Button onClick={applyCustomDate} disabled={!tempCustomDates.start || !tempCustomDates.end}>Aplicar</Button>
                 </div>
+            </Modal>
+
+            {/* Template Selector Modal */}
+            <Modal 
+                isOpen={isTemplateModalOpen} 
+                onClose={() => setIsTemplateModalOpen(false)} 
+                title="Escolha o Layout do Dashboard"
+                className="max-w-6xl w-full"
+            >
+                <DashboardTemplateSelector 
+                    currentTemplateId={currentTemplate.id}
+                    onSelect={handleTemplateChange}
+                    onClose={() => setIsTemplateModalOpen(false)}
+                />
             </Modal>
         </div>
     </AppShell>

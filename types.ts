@@ -39,6 +39,7 @@ export interface Workspace {
   metaConnected: boolean;
   adAccountId?: string;
   businessId?: string;
+  preferredTemplateId?: string; // New: Stores the selected dashboard layout
 }
 
 export interface MetaBusiness {
@@ -160,4 +161,24 @@ export interface CustomReport {
     dimension: string;
     filters: string[];
   };
+}
+
+// --- Dashboard Templates Types ---
+export type KpiFormat = 'currency' | 'number' | 'percent' | 'multiplier' | 'string';
+
+export interface KpiConfig {
+    key: string; // The data key to lookup (e.g., 'spend', 'roas', 'cpa')
+    label: string;
+    icon: string;
+    format: KpiFormat;
+    trendCheck?: 'high_is_good' | 'low_is_good'; // To determine up/down arrow color
+}
+
+export interface DashboardTemplate {
+    id: string;
+    name: string;
+    description: string;
+    category: 'ecom' | 'leads' | 'awareness' | 'traffic' | 'general';
+    icon: string;
+    kpis: KpiConfig[]; // The list of cards to show
 }
