@@ -458,19 +458,21 @@ const DashboardPage = ({ workspaces, onUpdateWorkspace, sdkReady }: { workspaces
               scale: 2,
               backgroundColor: '#131022', // Match dark theme bg
               useCORS: true,
-              ignoreElements: (el) => el.classList.contains('no-print')
+              ignoreElements: (el) => el.classList.contains('no-print'),
+              windowWidth: 1366 // Force desktop width capture
           });
 
           const imgData = canvas.toDataURL('image/png');
-          // Use pt units for PDF
-          const pdf = new jsPDF({
-              orientation: 'landscape',
-              unit: 'pt',
-              format: [canvas.width * 0.75, canvas.height * 0.75] // rough px to pt conversion
-          });
+          
+          // Fixed width of 1024pt as requested
+          const pdfWidth = 1024;
+          const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
 
-          const pdfWidth = pdf.internal.pageSize.getWidth();
-          const pdfHeight = pdf.internal.pageSize.getHeight();
+          const pdf = new jsPDF({
+              orientation: pdfHeight > pdfWidth ? 'portrait' : 'landscape',
+              unit: 'pt',
+              format: [pdfWidth, pdfHeight]
+          });
           
           pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
           pdf.save(`Dashboard-${currentWorkspace?.name || 'Workspace'}-${new Date().toISOString().split('T')[0]}.pdf`);
@@ -486,7 +488,7 @@ const DashboardPage = ({ workspaces, onUpdateWorkspace, sdkReady }: { workspaces
       // Helper to extract value safely from stats object
       // Stats structure depends on the API call result in fetchData
       
-      if (!stats) return { value: '-', trend: 'neutral' };
+      if (!stats) return { value: '-', trend: 'neutral', subValue: undefined };
 
       // Helper to parse potential string numbers from API
       const val = (v: any) => typeof v === 'string' ? parseFloat(v) : (typeof v === 'number' ? v : 0);
@@ -494,6 +496,7 @@ const DashboardPage = ({ workspaces, onUpdateWorkspace, sdkReady }: { workspaces
       let rawValue = 0;
       let formattedValue = '-';
       let trend: 'up' | 'down' | 'neutral' = 'neutral';
+      let subValue: string | undefined = undefined;
       
       // Basic extraction
       switch (key) {
@@ -568,7 +571,7 @@ const DashboardPage = ({ workspaces, onUpdateWorkspace, sdkReady }: { workspaces
                break;
       }
 
-      return { value: formattedValue, trend };
+      return { value: formattedValue, trend, subValue };
   };
 
   const filteredCampaigns = useMemo(() => {
@@ -830,11 +833,11 @@ const DashboardPage = ({ workspaces, onUpdateWorkspace, sdkReady }: { workspaces
 };
 
 // Helper for workspace routes to extract workspace object
-const WorkspaceRouteWrapper = ({ workspaces, children }: { workspaces: Workspace[], children: (w: Workspace) => React.ReactNode }) => {
+const WorkspaceRouteWrapper = ({ workspaces, render }: { workspaces: Workspace[], render: (w: Workspace) => React.ReactNode }) => {
     const { workspaceId } = useParams();
     const ws = workspaces.find(w => w.id === workspaceId);
     if (!ws) return <div className="p-10 text-center text-white">Workspace não encontrado</div>;
-    return <>{children(ws)}</>;
+    return <>{render(ws)}</>;
 };
 
 const App = () => {
@@ -916,9 +919,9 @@ const App = () => {
                 <Route path="/w/:workspaceId/dashboard" element={<DashboardPage workspaces={workspaces} onUpdateWorkspace={handleUpdateWorkspace} sdkReady={sdkReady} />} />
                 <Route path="/w/:workspaceId/templates" element={<TemplatesPage workspaces={workspaces} />} />
                 <Route path="/w/:workspaceId/setup" element={
-                    <WorkspaceRouteWrapper workspaces={workspaces}>
-                        {(ws) => <SetupWizard workspace={ws} onUpdateWorkspace={handleUpdateWorkspace} sdkReady={sdkReady} />}
-                    </WorkspaceRouteWrapper>
+                    <WorkspaceRouteWrapper workspaces={workspaces} render={(ws) => (
+                        <SetupWizard workspace={ws} onUpdateWorkspace={handleUpdateWorkspace} sdkReady={sdkReady} />
+                    )} />
                 } />
                 <Route path="/w/:workspaceId/reports" element={<CustomReportsPage workspaces={workspaces} />} />
                 <Route path="/w/:workspaceId/team" element={<TeamManagementPage workspaces={workspaces} />} />

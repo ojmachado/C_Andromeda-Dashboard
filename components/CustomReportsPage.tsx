@@ -61,16 +61,19 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({ report, onClose, onE
                 scale: 2,
                 backgroundColor: '#131022',
                 useCORS: true,
-                ignoreElements: (el) => el.classList.contains('no-print')
+                ignoreElements: (el) => el.classList.contains('no-print'),
+                windowWidth: 1366 // Force desktop layout
             });
 
             const imgData = canvas.toDataURL('image/png');
-            const pdfWidth = canvas.width;
-            const pdfHeight = canvas.height;
+            
+            // Fixed width constraint of 1024pt
+            const pdfWidth = 1024;
+            const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
 
             const pdf = new jsPDF({
-                orientation: 'landscape',
-                unit: 'px',
+                orientation: pdfHeight > pdfWidth ? 'portrait' : 'landscape',
+                unit: 'pt',
                 format: [pdfWidth, pdfHeight]
             });
 
@@ -296,8 +299,8 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({ report, onClose, onE
                             <div className="flex flex-col items-center justify-center w-full min-h-[400px]">
                                 <div className="relative w-72 h-72">
                                     <svg viewBox="0 0 32 32" className="w-full h-full transform -rotate-90">
-                                        <circle r="16" cx="16" cy="16" fill="transparent" stroke="#3713ec" strokeWidth="32" strokeDasharray="60 100" />
-                                        <circle r="16" cx="16" cy="16" fill="transparent" stroke="#10b981" strokeWidth="32" strokeDasharray="25 100" strokeDashoffset="-60" />
+                                        <circle r="16" cx="16" cy="16" fill="transparent" stroke="#3713ec" strokeWidth="32" strokeDasharray="40 100" />
+                                        <circle r="16" cx="16" cy="16" fill="transparent" stroke="#10b981" strokeWidth="32" strokeDasharray="30 100" strokeDashoffset="-40" />
                                         <circle r="16" cx="16" cy="16" fill="transparent" stroke="#f59e0b" strokeWidth="32" strokeDasharray="15 100" strokeDashoffset="-85" />
                                     </svg>
                                     <div className="absolute inset-0 flex items-center justify-center">
