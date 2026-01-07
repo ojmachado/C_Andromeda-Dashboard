@@ -60,21 +60,32 @@ export const Badge: React.FC<{ children: React.ReactNode; variant?: 'success' | 
 export const Modal: React.FC<{ 
   isOpen: boolean; 
   onClose: () => void; 
-  title: string; 
+  title?: string; 
   children: React.ReactNode;
   footer?: React.ReactNode;
-}> = ({ isOpen, onClose, title, children, footer }) => {
+  className?: string;
+  hideHeader?: boolean;
+}> = ({ isOpen, onClose, title, children, footer, className = 'max-w-md', hideHeader = false }) => {
   if (!isOpen) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-card-dark border border-border-dark rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-        <div className="px-6 py-5 border-b border-border-dark flex justify-between items-center bg-white/5">
-          <h3 className="text-lg font-bold text-white">{title}</h3>
-          <button onClick={onClose} className="text-text-secondary hover:text-white p-1 rounded-md hover:bg-white/10 transition-colors">
-            <span className="material-symbols-outlined text-xl">close</span>
-          </button>
-        </div>
-        <div className="p-6 text-white">{children}</div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className={`bg-card-dark border border-border-dark rounded-2xl w-full shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 ${className}`}>
+        {!hideHeader && (
+          <div className="px-6 py-5 border-b border-border-dark flex justify-between items-center bg-white/5">
+            <h3 className="text-lg font-bold text-white">{title}</h3>
+            <button onClick={onClose} className="text-text-secondary hover:text-white p-1 rounded-md hover:bg-white/10 transition-colors">
+              <span className="material-symbols-outlined text-xl">close</span>
+            </button>
+          </div>
+        )}
+        {hideHeader && (
+            <div className="absolute top-4 right-4 z-10">
+                <button onClick={onClose} className="text-text-secondary hover:text-white p-2 rounded-lg hover:bg-white/10 transition-colors">
+                    <span className="material-symbols-outlined text-xl">close</span>
+                </button>
+            </div>
+        )}
+        <div className="p-8 text-white">{children}</div>
         {footer && <div className="px-6 py-4 bg-white/5 border-t border-border-dark flex justify-end gap-3">{footer}</div>}
       </div>
     </div>
