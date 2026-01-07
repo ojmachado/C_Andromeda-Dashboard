@@ -49,6 +49,17 @@ export interface InsightData {
   costPerConversation: number;
 }
 
+export interface AdCreativeData {
+  id: string;
+  name: string;
+  title: string;
+  body: string;
+  image_url?: string;
+  thumbnail_url?: string;
+  object_story_spec?: any;
+  call_to_action_type?: string;
+}
+
 export interface AdminConfig {
   appId: string;
   isSecretSet: boolean;
@@ -69,6 +80,7 @@ export interface APIGeneralInsights {
   purchase_roas?: { value: string }[];
   cost_per_action_type?: { action_type: string, value: string }[];
   actions?: { action_type: string, value: string }[];
+  action_values?: { action_type: string, value: string }[];
 }
 
 export interface APICampaignResponse {
