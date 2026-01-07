@@ -180,7 +180,7 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
       let listFields = 'id,name,status';
       if (viewLevel === 'campaign') listFields += ',objective';
       if (viewLevel === 'adset') listFields += ',campaign{id,objective,name}'; // Added campaign ID for linking
-      if (viewLevel === 'ad') listFields += ',campaign{id,objective,name},preview_shareable_link'; // Added campaign ID for linking
+      if (viewLevel === 'ad') listFields += ',campaign{id,objective,name},preview_shareable_link'; // Request link for ads
 
       const p2 = new Promise<any>((resolve) => {
           window.FB.api(`/${accountId}/${levelPath}`, { 

@@ -144,25 +144,38 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
         const spec = creative.object_story_spec;
         const assetFeed = creative.asset_feed_spec; // Dynamic Ads
 
-        let title = creative.title || get(spec, 'link_data.name') || get(spec, 'video_data.title') || '';
-        let body = creative.body || get(spec, 'link_data.message') || get(spec, 'video_data.message') || '';
-        let image = creative.image_url || creative.thumbnail_url || get(spec, 'link_data.picture') || get(spec, 'video_data.image_url') || get(spec, 'photo_data.picture') || '';
-        let domain = 'LINK';
+        // Helper to extract deeply nested properties safely
+        const extract = (root: any, path: string) => get(root, path);
 
-        const link = get(spec, 'link_data.link');
-        if (link) {
-            try { domain = new URL(link).hostname.replace('www.', '').toUpperCase(); } catch {}
-        }
+        // 1. Try Object Story Spec (Standard Ads) first as it contains the actual post content
+        let title = extract(spec, 'link_data.name') || extract(spec, 'video_data.title');
+        let body = extract(spec, 'link_data.message') || extract(spec, 'video_data.message');
+        let image = 
+            extract(spec, 'link_data.picture') || 
+            extract(spec, 'video_data.image_url') || 
+            extract(spec, 'photo_data.picture');
 
-        // Fallback for Dynamic Creative (Asset Feed)
+        // 2. Try Asset Feed (Dynamic Ads)
         if (assetFeed) {
-             const firstTitle = get(assetFeed, 'titles.0.text');
-             const firstBody = get(assetFeed, 'bodies.0.text');
-             const firstImage = get(assetFeed, 'images.0.url');
+             const firstTitle = extract(assetFeed, 'titles.0.text');
+             const firstBody = extract(assetFeed, 'bodies.0.text'); // Primary Text
+             const firstImage = extract(assetFeed, 'images.0.url') || extract(assetFeed, 'videos.0.thumbnail_url');
              
              if (!title) title = firstTitle;
              if (!body) body = firstBody;
              if (!image) image = firstImage;
+        }
+
+        // 3. Fallback to top-level fields (often metadata or legacy)
+        if (!title) title = creative.title || '';
+        if (!body) body = creative.body || '';
+        if (!image) image = creative.image_url || creative.thumbnail_url || '';
+
+        // Domain extraction
+        let domain = 'LINK';
+        const link = extract(spec, 'link_data.link') || extract(assetFeed, 'link_urls.0.website_url');
+        if (link) {
+            try { domain = new URL(link).hostname.replace('www.', '').toUpperCase(); } catch {}
         }
 
         return { title, body, image, domain };
