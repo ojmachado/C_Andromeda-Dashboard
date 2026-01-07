@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useParams, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { AppShell } from './components/Navigation';
@@ -9,6 +8,7 @@ import { IntegrationsPage, WorkspacesPage, SetupWizard } from './components/SaaS
 import { AdDetailsPage } from './components/AdDetailsPage';
 import { ActivityLogsPage } from './components/ActivityLogsPage';
 import { CustomReportsPage } from './components/CustomReportsPage';
+import { LoginPage } from './components/LoginPage';
 import type { Workspace, InsightData, DateRangePreset, APIGeneralInsights } from './types';
 
 declare global {
@@ -536,7 +536,7 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
                         ].map((l) => (
                             <button 
                                 key={l.id}
-                                onClick={() => setViewLevel(l.id as ViewLevel)} 
+                                onClick={() => setViewMode(l.id as ViewLevel)} 
                                 className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all whitespace-nowrap ${
                                     viewLevel === l.id 
                                     ? 'bg-primary text-white shadow-sm' 
@@ -681,12 +681,31 @@ const WorkspaceSetupWrapper = ({ workspaces, onUpdate, sdkReady }: { workspaces:
     return <SetupWizard workspace={workspace} onUpdateWorkspace={onUpdate} sdkReady={sdkReady} />;
 };
 
+const ProtectedRoute = ({ children, isAuthenticated }: { children?: React.ReactNode, isAuthenticated: boolean }) => {
+    if (!isAuthenticated) return <Navigate to="/login" replace />;
+    return <>{children}</>;
+};
+
 const App = () => {
     const [sdkReady, setSdkReady] = useState(false);
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+
     // Initialize with a demo workspace for better UX upon first load
     const [workspaces, setWorkspaces] = useState<Workspace[]>([
         { id: 'wk_demo', name: 'Demo Store', metaConnected: false }
     ]);
+
+    useEffect(() => {
+        const checkAuth = () => {
+            const session = SecureKV.getSession();
+            if (session && session.email) {
+                setIsAuthenticated(true);
+            }
+            setIsCheckingAuth(false);
+        };
+        checkAuth();
+    }, []);
 
     useEffect(() => {
         const initSDK = async () => {
@@ -733,19 +752,61 @@ const App = () => {
         setWorkspaces(prev => prev.map(w => w.id === updated.id ? updated : w));
     };
 
+    if (isCheckingAuth) return <div className="h-screen bg-background-dark"></div>;
+
     return (
         <Routes>
+            {/* Public Login Route */}
+            <Route path="/login" element={
+                isAuthenticated ? <Navigate to="/workspaces" replace /> : <LoginPage onLogin={() => setIsAuthenticated(true)} />
+            } />
+
+            {/* Protected Routes */}
             <Route path="/" element={<Navigate to="/workspaces" replace />} />
-            <Route path="/workspaces" element={<WorkspacesPage workspaces={workspaces} onCreateWorkspace={handleCreateWorkspace} />} />
-            <Route path="/integrations" element={<IntegrationsPage />} />
             
-            <Route path="/w/:workspaceId/dashboard" element={<DashboardPage workspaces={workspaces} sdkReady={sdkReady} />} />
-            <Route path="/w/:workspaceId/setup" element={<WorkspaceSetupWrapper workspaces={workspaces} onUpdate={handleUpdateWorkspace} sdkReady={sdkReady} />} />
-            <Route path="/w/:workspaceId/ads/:level/:adId" element={<AdDetailsPage workspaces={workspaces} />} />
-            <Route path="/w/:workspaceId/logs" element={<ActivityLogsPage workspaces={workspaces} />} />
-            <Route path="/w/:workspaceId/reports" element={<CustomReportsPage workspaces={workspaces} />} />
+            <Route path="/workspaces" element={
+                <ProtectedRoute isAuthenticated={isAuthenticated}>
+                    <WorkspacesPage workspaces={workspaces} onCreateWorkspace={handleCreateWorkspace} />
+                </ProtectedRoute>
+            } />
             
-            <Route path="*" element={<Navigate to="/workspaces" replace />} />
+            <Route path="/integrations" element={
+                <ProtectedRoute isAuthenticated={isAuthenticated}>
+                    <IntegrationsPage />
+                </ProtectedRoute>
+            } />
+            
+            <Route path="/w/:workspaceId/dashboard" element={
+                <ProtectedRoute isAuthenticated={isAuthenticated}>
+                    <DashboardPage workspaces={workspaces} sdkReady={sdkReady} />
+                </ProtectedRoute>
+            } />
+            
+            <Route path="/w/:workspaceId/setup" element={
+                <ProtectedRoute isAuthenticated={isAuthenticated}>
+                    <WorkspaceSetupWrapper workspaces={workspaces} onUpdate={handleUpdateWorkspace} sdkReady={sdkReady} />
+                </ProtectedRoute>
+            } />
+            
+            <Route path="/w/:workspaceId/ads/:level/:adId" element={
+                <ProtectedRoute isAuthenticated={isAuthenticated}>
+                    <AdDetailsPage workspaces={workspaces} />
+                </ProtectedRoute>
+            } />
+            
+            <Route path="/w/:workspaceId/logs" element={
+                <ProtectedRoute isAuthenticated={isAuthenticated}>
+                    <ActivityLogsPage workspaces={workspaces} />
+                </ProtectedRoute>
+            } />
+            
+            <Route path="/w/:workspaceId/reports" element={
+                <ProtectedRoute isAuthenticated={isAuthenticated}>
+                    <CustomReportsPage workspaces={workspaces} />
+                </ProtectedRoute>
+            } />
+            
+            <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
     );
 };

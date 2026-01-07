@@ -7,6 +7,13 @@ export enum SetupStep {
   Finished = 4
 }
 
+export interface User {
+  email: string;
+  name: string;
+  isMaster: boolean;
+  avatar?: string;
+}
+
 export interface Workspace {
   id: string;
   name: string;
