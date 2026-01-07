@@ -1,15 +1,15 @@
 
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { AppShell } from './Navigation';
-import { Button, Card, Badge } from './UI';
+import { Button, Modal } from './UI';
 import type { Workspace, TeamMember } from '../types';
 
-// Mock Data
+// Mock Data matching the design
 const MOCK_MEMBERS: TeamMember[] = [
-    { id: '1', name: 'Marcela Souza', email: 'marcela.souza@andromedalabs.com', role: 'editor', status: 'active' },
-    { id: '2', name: 'João Silva', email: 'joao@client.com', role: 'viewer', status: 'pending' },
-    { id: '3', name: 'Admin User', email: 'ojmachadomkt@gmail.com', role: 'admin', status: 'active' }
+    { id: '1', name: 'Ana Silva', email: 'ana@company.com', role: 'admin', status: 'active', avatar: 'AS' },
+    { id: '2', name: 'Carlos Souza', email: 'carlos@company.com', role: 'editor', status: 'pending', avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuD0U_Y4Pw-DfshcBgt1GE-BF8rxVIxAu7OVroK4Z5JG7GlPxMt3QegXTnt3NunKJySV1wCGnq3Vw1WSxxKc6Ol_AJv5D7o4s1jee6EYxZ1cvpOr2u7J4v0JR3XARSbINI6LlgHKmqsk02uFWmcuhvKhPR9o2MRSd6LvoQgXF_0WttpfmJ19BA-dGJnLLrw2HL5WXFBKLjyyHMrQ4YGWamnXsnItyx04ywP28erpiw8uJ8uQe2M_pz_XLQ6kJwM1m-j8Kbd0xKrwSbE' },
+    { id: '3', name: 'Beatriz Lima', email: 'bia@company.com', role: 'viewer', status: 'active', avatar: 'BL' }
 ];
 
 interface EditMemberModalProps {
@@ -130,7 +130,7 @@ const EditMemberModal: React.FC<EditMemberModalProps> = ({ isOpen, onClose, memb
                                 <span className="material-symbols-outlined text-blue-600 dark:text-[#9b92c9] shrink-0" style={{ fontSize: '20px' }}>info</span>
                                 <p className="text-sm text-blue-900 dark:text-[#9b92c9] leading-relaxed">
                                     {role === 'admin' && <><span className="font-semibold">Administradores</span> têm acesso total ao workspace, incluindo faturamento e gerenciamento de membros.</>}
-                                    {role === 'editor' && <><span className="font-semibold">Editores</span> podem criar e gerenciar campanhas, conectar contas de anúncios, mas não podem gerenciar membros ou faturamento.</>}
+                                    {role === 'editor' && <><span className="font-semibold">Editores</span> (Analistas) podem criar e gerenciar campanhas, conectar contas de anúncios, mas não podem gerenciar membros ou faturamento.</>}
                                     {role === 'viewer' && <><span className="font-semibold">Visualizadores</span> podem apenas ver relatórios e dashboards, sem permissão de edição.</>}
                                 </p>
                             </div>
@@ -196,6 +196,7 @@ export const TeamManagementPage = ({ workspaces }: { workspaces: Workspace[] }) 
     const [members, setMembers] = useState<TeamMember[]>(MOCK_MEMBERS);
     const [selectedMember, setSelectedMember] = useState<TeamMember | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [searchTerm, setSearchTerm] = useState('');
 
     const handleEdit = (member: TeamMember) => {
         setSelectedMember(member);
@@ -204,7 +205,6 @@ export const TeamManagementPage = ({ workspaces }: { workspaces: Workspace[] }) 
 
     const handleSaveMember = (updated: TeamMember) => {
         setMembers(prev => prev.map(m => m.id === updated.id ? updated : m));
-        // Modal closes automatically after success toast in the component
     };
 
     const handleDeleteMember = (id: string) => {
@@ -214,76 +214,188 @@ export const TeamManagementPage = ({ workspaces }: { workspaces: Workspace[] }) 
         }
     };
 
+    const filteredMembers = members.filter(m => 
+        m.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        m.email.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+    const getRoleBadge = (role: string) => {
+        switch(role) {
+            case 'admin':
+                return (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-primary/10 text-primary dark:bg-primary/20 dark:text-blue-300 border border-primary/20">
+                        <span className="material-symbols-outlined text-[14px]">shield_person</span>
+                        Admin
+                    </span>
+                );
+            case 'editor':
+                return (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-700 dark:bg-white/5 dark:text-gray-300 border border-gray-200 dark:border-white/10">
+                        <span className="material-symbols-outlined text-[14px]">analytics</span>
+                        Analista
+                    </span>
+                );
+            default:
+                return (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-700 dark:bg-white/5 dark:text-gray-300 border border-gray-200 dark:border-white/10">
+                        <span className="material-symbols-outlined text-[14px]">visibility</span>
+                        Visualizador
+                    </span>
+                );
+        }
+    };
+
     return (
         <AppShell workspaces={workspaces} activeWorkspaceId={workspaceId}>
-            <div className="max-w-[1200px] mx-auto py-8 px-6 space-y-8">
-                {/* Header */}
-                <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-2 border-b border-border-dark">
-                    <div className="flex flex-col gap-2">
-                        <h1 className="text-3xl font-bold text-white leading-tight tracking-tight">Gerenciar Equipe</h1>
-                        <p className="text-text-secondary text-base max-w-2xl">
-                            Controle quem tem acesso a este workspace e suas permissões.
+            <div className="w-full max-w-[1400px] mx-auto px-6 lg:px-8 py-8">
+                
+                {/* Breadcrumbs */}
+                <nav className="flex items-center gap-2 text-sm text-gray-500 dark:text-text-secondary mb-6">
+                    <Link to={`/w/${workspaceId}/dashboard`} className="hover:text-primary dark:hover:text-white transition-colors">Dashboard</Link>
+                    <span className="material-symbols-outlined text-[16px]">chevron_right</span>
+                    <span className="font-medium text-gray-900 dark:text-white">Membros</span>
+                </nav>
+
+                {/* Page Header */}
+                <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
+                    <div className="space-y-1">
+                        <h1 className="text-3xl md:text-4xl font-black tracking-tight text-gray-900 dark:text-white">Membros do Workspace</h1>
+                        <p className="text-gray-500 dark:text-text-secondary text-base max-w-2xl">
+                            Gerencie quem tem acesso aos dados, permissões de análise e configurações deste workspace.
                         </p>
                     </div>
-                    <Button>
-                        <span className="material-symbols-outlined text-[20px]">person_add</span>
-                        <span>Convidar Membro</span>
-                    </Button>
+                    <button className="flex items-center justify-center gap-2 bg-primary hover:bg-primary-dark text-white px-5 h-11 rounded-lg font-semibold text-sm transition-all shadow-lg shadow-primary/25 shrink-0">
+                        <span className="material-symbols-outlined text-[20px]">add</span>
+                        Convidar Membro
+                    </button>
                 </div>
 
-                {/* Member List */}
-                <div className="bg-card-dark border border-border-dark rounded-xl overflow-hidden shadow-sm">
-                    <table className="w-full text-left border-collapse">
-                        <thead>
-                            <tr className="bg-white/5 border-b border-border-dark">
-                                <th className="px-6 py-4 text-xs font-bold text-text-secondary uppercase tracking-wider">Membro</th>
-                                <th className="px-6 py-4 text-xs font-bold text-text-secondary uppercase tracking-wider">Cargo</th>
-                                <th className="px-6 py-4 text-xs font-bold text-text-secondary uppercase tracking-wider">Status</th>
-                                <th className="px-6 py-4 text-xs font-bold text-text-secondary uppercase tracking-wider text-right">Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-border-dark">
-                            {members.map((member) => (
-                                <tr key={member.id} className="group hover:bg-white/5 transition-colors">
-                                    <td className="px-6 py-4">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-primary to-purple-500 flex items-center justify-center text-white font-bold shadow-lg">
-                                                {member.name.charAt(0)}
-                                            </div>
-                                            <div>
-                                                <div className="text-white font-medium text-sm">{member.name}</div>
-                                                <div className="text-text-secondary text-xs">{member.email}</div>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border capitalize ${
-                                            member.role === 'admin' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' : 
-                                            member.role === 'editor' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
-                                            'bg-slate-500/10 text-slate-400 border-slate-500/20'
-                                        }`}>
-                                            {member.role}
-                                        </span>
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <Badge variant={member.status === 'active' ? 'success' : 'warning'}>
-                                            {member.status === 'active' ? 'Ativo' : 'Pendente'}
-                                        </Badge>
-                                    </td>
-                                    <td className="px-6 py-4 text-right">
-                                        <button 
-                                            onClick={() => handleEdit(member)}
-                                            className="p-2 rounded-lg hover:bg-white/10 text-text-secondary hover:text-white transition-colors"
-                                            title="Editar Membro"
-                                        >
-                                            <span className="material-symbols-outlined text-[20px]">edit</span>
-                                        </button>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                {/* Filters & Search Toolbar */}
+                <div className="flex flex-col sm:flex-row gap-4 mb-6">
+                    <div className="relative flex-1 max-w-md group">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-text-secondary group-focus-within:text-primary transition-colors material-symbols-outlined text-[20px]">search</span>
+                        <input 
+                            className="w-full h-10 pl-10 pr-4 rounded-lg bg-white dark:bg-card-dark border border-gray-200 dark:border-border-dark focus:border-primary dark:focus:border-primary focus:ring-1 focus:ring-primary text-sm outline-none transition-all placeholder:text-gray-400 dark:placeholder:text-gray-600 text-gray-900 dark:text-white" 
+                            placeholder="Buscar por nome ou email..." 
+                            type="text"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                    </div>
+                    <div className="flex gap-3 overflow-x-auto pb-2 sm:pb-0">
+                        <button className="flex items-center gap-2 px-3 h-10 rounded-lg bg-white dark:bg-card-dark border border-gray-200 dark:border-border-dark hover:border-primary dark:hover:border-primary text-sm font-medium text-gray-600 dark:text-text-secondary transition-colors whitespace-nowrap">
+                            <span className="material-symbols-outlined text-[18px]">filter_list</span>
+                            <span>Cargo: Todos</span>
+                            <span className="material-symbols-outlined text-[18px]">arrow_drop_down</span>
+                        </button>
+                        <button className="flex items-center gap-2 px-3 h-10 rounded-lg bg-white dark:bg-card-dark border border-gray-200 dark:border-border-dark hover:border-primary dark:hover:border-primary text-sm font-medium text-gray-600 dark:text-text-secondary transition-colors whitespace-nowrap">
+                            <span className="material-symbols-outlined text-[18px]">check_circle</span>
+                            <span>Status: Todos</span>
+                            <span className="material-symbols-outlined text-[18px]">arrow_drop_down</span>
+                        </button>
+                    </div>
                 </div>
+
+                {filteredMembers.length > 0 ? (
+                    /* Members Table */
+                    <div className="rounded-xl border border-gray-200 dark:border-border-dark bg-white dark:bg-card-dark overflow-hidden shadow-sm mb-16">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse">
+                                <thead>
+                                    <tr className="border-b border-gray-200 dark:border-border-dark bg-gray-50/50 dark:bg-white/5">
+                                        <th className="px-6 py-4 text-xs font-semibold text-gray-500 dark:text-text-secondary uppercase tracking-wider w-[35%]">Membro</th>
+                                        <th className="px-6 py-4 text-xs font-semibold text-gray-500 dark:text-text-secondary uppercase tracking-wider w-[20%]">Cargo</th>
+                                        <th className="px-6 py-4 text-xs font-semibold text-gray-500 dark:text-text-secondary uppercase tracking-wider w-[20%]">Status</th>
+                                        <th className="px-6 py-4 text-xs font-semibold text-gray-500 dark:text-text-secondary uppercase tracking-wider w-[25%] text-right">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-200 dark:divide-border-dark">
+                                    {filteredMembers.map((member) => (
+                                        <tr key={member.id} className="group hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors">
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                <div className="flex items-center gap-3">
+                                                    {member.avatar?.startsWith('http') ? (
+                                                        <div className="size-10 rounded-full overflow-hidden">
+                                                            <img alt={member.name} className="w-full h-full object-cover" src={member.avatar} />
+                                                        </div>
+                                                    ) : (
+                                                        <div className={`size-10 rounded-full flex items-center justify-center text-white font-bold text-sm ${member.role === 'viewer' ? 'bg-pink-600' : 'bg-gradient-to-br from-blue-500 to-primary'}`}>
+                                                            {member.avatar || member.name.charAt(0)}
+                                                        </div>
+                                                    )}
+                                                    <div className="flex flex-col">
+                                                        <span className="text-sm font-semibold text-gray-900 dark:text-white">{member.name}</span>
+                                                        <span className="text-sm text-gray-500 dark:text-text-secondary">{member.email}</span>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                {getRoleBadge(member.role)}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="relative flex h-2.5 w-2.5">
+                                                        {member.status === 'active' && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>}
+                                                        <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${member.status === 'active' ? 'bg-emerald-500' : 'bg-amber-500'}`}></span>
+                                                    </span>
+                                                    <span className={`text-sm font-medium ${member.status === 'active' ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                                                        {member.status === 'active' ? 'Ativo' : 'Pendente'}
+                                                    </span>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-right">
+                                                <div className="flex items-center justify-end gap-1">
+                                                    {member.status === 'pending' && (
+                                                        <button className="text-xs font-medium text-primary hover:text-primary-dark hover:underline mr-2">
+                                                            Reenviar
+                                                        </button>
+                                                    )}
+                                                    <button 
+                                                        onClick={() => handleEdit(member)}
+                                                        className="text-gray-400 dark:text-text-secondary hover:text-primary dark:hover:text-white p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors"
+                                                    >
+                                                        <span className="material-symbols-outlined text-[20px]">edit</span>
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => handleDeleteMember(member.id)}
+                                                        className="text-gray-400 dark:text-text-secondary hover:text-red-500 dark:hover:text-red-400 p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                                                    >
+                                                        <span className="material-symbols-outlined text-[20px]">delete</span>
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                        {/* Table Footer/Pagination */}
+                        <div className="px-6 py-4 border-t border-gray-200 dark:border-border-dark flex items-center justify-between bg-gray-50/50 dark:bg-white/[0.02]">
+                            <p className="text-xs text-gray-500 dark:text-text-secondary">
+                                Mostrando <span className="font-medium">1</span> a <span className="font-medium">{filteredMembers.length}</span> de <span className="font-medium">{filteredMembers.length}</span> membros
+                            </p>
+                            <div className="flex gap-2">
+                                <button className="px-3 py-1 rounded-md border border-gray-200 dark:border-border-dark bg-white dark:bg-card-dark text-xs font-medium text-gray-500 dark:text-text-secondary opacity-50 cursor-not-allowed">Anterior</button>
+                                <button className="px-3 py-1 rounded-md border border-gray-200 dark:border-border-dark bg-white dark:bg-card-dark text-xs font-medium text-gray-500 dark:text-text-secondary opacity-50 cursor-not-allowed">Próximo</button>
+                            </div>
+                        </div>
+                    </div>
+                ) : (
+                    /* Empty State */
+                    <div className="flex flex-col items-center justify-center p-12 rounded-xl border-2 border-dashed border-gray-200 dark:border-border-dark bg-white dark:bg-card-dark/50 text-center max-w-2xl mx-auto mt-4">
+                        <div className="size-20 rounded-full bg-gray-50 dark:bg-white/5 flex items-center justify-center mb-6 ring-8 ring-gray-50 dark:ring-white/[0.02]">
+                            <span className="material-symbols-outlined text-[40px] text-gray-400 dark:text-text-secondary">group_add</span>
+                        </div>
+                        <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Nenhum membro convidado ainda</h3>
+                        <p className="text-gray-500 dark:text-text-secondary mb-8 max-w-sm mx-auto leading-relaxed">
+                            Comece a colaborar convidando seus colegas para analisar dados e gerenciar campanhas neste workspace.
+                        </p>
+                        <button className="flex items-center justify-center gap-2 bg-primary hover:bg-primary-dark text-white px-6 h-10 rounded-lg font-semibold text-sm transition-all shadow-lg shadow-primary/20">
+                            <span className="material-symbols-outlined text-[20px]">mail</span>
+                            Convidar o primeiro membro
+                        </button>
+                    </div>
+                )}
             </div>
 
             {/* Render Modal */}
