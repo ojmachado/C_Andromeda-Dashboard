@@ -6,13 +6,14 @@ import type { DashboardTemplate } from '../types';
 interface TemplateSelectorProps {
     currentTemplateId: string;
     onSelect: (template: DashboardTemplate) => void;
-    onClose: () => void;
+    onClose?: () => void; // Made optional for full page view
 }
 
 export const DashboardTemplateSelector: React.FC<TemplateSelectorProps> = ({ currentTemplateId, onSelect, onClose }) => {
     const categories = [
         { id: 'all', label: 'Todos' },
         { id: 'ecom', label: 'Vendas' },
+        { id: 'messaging', label: 'Conversas' },
         { id: 'leads', label: 'Leads' },
         { id: 'awareness', label: 'Engajamento' }
     ];
@@ -40,7 +41,7 @@ export const DashboardTemplateSelector: React.FC<TemplateSelectorProps> = ({ cur
                 ))}
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-y-auto pr-2 custom-scrollbar" style={{ maxHeight: '60vh' }}>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-y-auto pr-2 custom-scrollbar flex-1" style={{ maxHeight: onClose ? '60vh' : 'none' }}>
                 {filteredTemplates.map(template => {
                     const isSelected = template.id === currentTemplateId;
                     
@@ -58,6 +59,7 @@ export const DashboardTemplateSelector: React.FC<TemplateSelectorProps> = ({ cur
                                 <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-white shadow-lg ${
                                     template.category === 'ecom' ? 'bg-emerald-500' :
                                     template.category === 'leads' ? 'bg-blue-500' :
+                                    template.category === 'messaging' ? 'bg-sky-500' :
                                     template.category === 'awareness' ? 'bg-purple-500' :
                                     'bg-primary'
                                 }`}>
@@ -79,7 +81,7 @@ export const DashboardTemplateSelector: React.FC<TemplateSelectorProps> = ({ cur
                                 <div className="flex items-center gap-2 mb-3">
                                     <span className="material-symbols-outlined text-xs text-slate-400 dark:text-text-secondary">{template.icon}</span>
                                     <span className="text-xs font-medium uppercase tracking-wider text-slate-400 dark:text-text-secondary">
-                                        Foco: {template.category === 'ecom' ? 'Vendas' : template.category === 'leads' ? 'Cadastros' : template.category === 'awareness' ? 'Alcance' : 'Geral'}
+                                        Foco: {template.category === 'ecom' ? 'Vendas' : template.category === 'leads' ? 'Cadastros' : template.category === 'messaging' ? 'Conversas' : template.category === 'awareness' ? 'Alcance' : 'Geral'}
                                     </span>
                                 </div>
                                 <p className="text-sm text-slate-500 dark:text-text-secondary mb-6 line-clamp-3 leading-relaxed">
@@ -114,14 +116,16 @@ export const DashboardTemplateSelector: React.FC<TemplateSelectorProps> = ({ cur
                 })}
             </div>
             
-            <div className="mt-6 flex justify-end pt-4 border-t border-gray-200 dark:border-[#292348]">
-                <button 
-                    onClick={onClose}
-                    className="px-6 py-2.5 rounded-lg text-sm font-medium text-slate-500 dark:text-text-secondary hover:text-slate-900 dark:hover:text-white transition-colors"
-                >
-                    Fechar
-                </button>
-            </div>
+            {onClose && (
+                <div className="mt-6 flex justify-end pt-4 border-t border-gray-200 dark:border-[#292348]">
+                    <button 
+                        onClick={onClose}
+                        className="px-6 py-2.5 rounded-lg text-sm font-medium text-slate-500 dark:text-text-secondary hover:text-slate-900 dark:hover:text-white transition-colors"
+                    >
+                        Fechar
+                    </button>
+                </div>
+            )}
         </div>
     );
 };

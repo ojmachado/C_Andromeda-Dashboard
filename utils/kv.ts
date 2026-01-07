@@ -31,6 +31,21 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
         ]
     },
     {
+        id: 'tpl_conversations',
+        name: 'Conversas Iniciadas',
+        description: 'Focado em campanhas de mensagem (WhatsApp, Direct, Messenger).',
+        category: 'messaging',
+        icon: 'chat',
+        kpis: [
+            { key: 'messages', label: 'Conversas Iniciadas', icon: 'forum', format: 'number', trendCheck: 'high_is_good' },
+            { key: 'cost_per_message', label: 'Custo por Conversa', icon: 'savings', format: 'currency', trendCheck: 'low_is_good' },
+            { key: 'spend', label: 'Investimento', icon: 'payments', format: 'currency', trendCheck: 'low_is_good' },
+            { key: 'cpm', label: 'CPM (Alcance)', icon: 'campaign', format: 'currency', trendCheck: 'low_is_good' },
+            { key: 'clicks', label: 'Cliques no Link', icon: 'ads_click', format: 'number', trendCheck: 'high_is_good' },
+            { key: 'ctr', label: 'CTR (Taxa de Clique)', icon: 'touch_app', format: 'percent', trendCheck: 'high_is_good' }
+        ]
+    },
+    {
         id: 'tpl_ecom',
         name: 'E-commerce & Vendas',
         description: 'Focado em retorno financeiro, ROAS e custo por compra.',

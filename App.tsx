@@ -36,6 +36,39 @@ const ALL_OBJECTIVES = [
 
 type ViewLevel = 'campaign' | 'adset' | 'ad';
 
+// --- Dedicated Template Selection Page ---
+const TemplatesPage = ({ workspaces }: { workspaces: Workspace[] }) => {
+    const { workspaceId } = useParams();
+    const navigate = useNavigate();
+    const [currentTemplate, setCurrentTemplate] = useState<DashboardTemplate>(SecureKV.getWorkspaceTemplate(workspaceId || ''));
+
+    const handleTemplateChange = (template: DashboardTemplate) => {
+        if (workspaceId) {
+            SecureKV.saveWorkspaceTemplate(workspaceId, template.id);
+            setCurrentTemplate(template);
+            // Navigate back to dashboard after selection
+            navigate(`/w/${workspaceId}/dashboard`);
+        }
+    };
+
+    return (
+        <AppShell workspaces={workspaces} activeWorkspaceId={workspaceId}>
+            <div className="max-w-[1400px] mx-auto py-8 px-6 space-y-8 h-full flex flex-col">
+                <div className="flex flex-col gap-2 border-b border-border-dark pb-6">
+                    <h1 className="text-3xl font-black text-slate-900 dark:text-white">Galeria de Templates</h1>
+                    <p className="text-text-secondary text-sm">Escolha o layout de métricas ideal para o objetivo do seu negócio.</p>
+                </div>
+                <div className="flex-1 min-h-0">
+                    <DashboardTemplateSelector 
+                        currentTemplateId={currentTemplate.id}
+                        onSelect={handleTemplateChange}
+                    />
+                </div>
+            </div>
+        </AppShell>
+    );
+};
+
 const DashboardPage = ({ workspaces, onUpdateWorkspace, sdkReady }: { workspaces: Workspace[], onUpdateWorkspace: (w: Workspace) => void, sdkReady: boolean }) => {
   const { workspaceId } = useParams();
   const navigate = useNavigate();
@@ -565,7 +598,7 @@ const DashboardPage = ({ workspaces, onUpdateWorkspace, sdkReady }: { workspaces
                         <div className="flex items-center gap-2">
                             <h1 className="text-3xl font-black text-slate-900 dark:text-white">Dashboard</h1>
                             <button 
-                                onClick={() => setIsTemplateModalOpen(true)}
+                                onClick={() => navigate(`/w/${workspaceId}/templates`)}
                                 className="px-2 py-1 rounded bg-gray-100 dark:bg-white/5 border border-gray-200 dark:border-white/10 hover:bg-gray-200 dark:hover:bg-white/10 transition-colors flex items-center gap-1.5 group"
                                 title="Alterar Layout do Dashboard"
                             >
@@ -786,20 +819,7 @@ const DashboardPage = ({ workspaces, onUpdateWorkspace, sdkReady }: { workspaces
                 </div>
             </Modal>
 
-            {/* Template Selector Modal */}
-            <Modal 
-                isOpen={isTemplateModalOpen} 
-                onClose={() => setIsTemplateModalOpen(false)} 
-                title="Escolha o Layout do Dashboard"
-                className="max-w-6xl w-full"
-            >
-                <DashboardTemplateSelector 
-                    currentTemplateId={currentTemplate.id}
-                    onSelect={handleTemplateChange}
-                    onClose={() => setIsTemplateModalOpen(false)}
-                />
-            </Modal>
-
+            {/* Template Selector Modal - REMOVED from here, now a separate page */}
             {/* Share Modal */}
             <DashboardShareModal 
                 isOpen={isShareModalOpen}
@@ -929,6 +949,12 @@ const App = () => {
             <Route path="/w/:workspaceId/dashboard" element={
                 <ProtectedRoute isAuthenticated={isAuthenticated}>
                     <DashboardPage workspaces={workspaces} onUpdateWorkspace={handleUpdateWorkspace} sdkReady={sdkReady} />
+                </ProtectedRoute>
+            } />
+
+            <Route path="/w/:workspaceId/templates" element={
+                <ProtectedRoute isAuthenticated={isAuthenticated}>
+                    <TemplatesPage workspaces={workspaces} />
                 </ProtectedRoute>
             } />
             

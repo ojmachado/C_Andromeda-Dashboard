@@ -182,7 +182,7 @@ export interface DashboardTemplate {
     id: string;
     name: string;
     description: string;
-    category: 'ecom' | 'leads' | 'awareness' | 'traffic' | 'general';
+    category: 'ecom' | 'leads' | 'awareness' | 'traffic' | 'general' | 'messaging';
     icon: string;
     kpis: KpiConfig[]; // The list of cards to show
 }

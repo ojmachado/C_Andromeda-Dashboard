@@ -103,6 +103,13 @@ export const AppShell: React.FC<AppShellProps> = ({ children, workspaces = [], a
                 </Link>
 
                 <Link 
+                    to={`/w/${activeWorkspaceId}/templates`}
+                    className={`text-sm font-medium transition-colors px-3 py-2 rounded-lg ${isActive(`/w/${activeWorkspaceId}/templates`) ? 'text-white bg-white/5' : 'text-text-secondary hover:text-white hover:bg-white/5'}`}
+                >
+                    Templates
+                </Link>
+
+                <Link 
                     to={`/w/${activeWorkspaceId}/reports`}
                     className={`text-sm font-medium transition-colors px-3 py-2 rounded-lg flex items-center gap-2 ${isActive(`/w/${activeWorkspaceId}/reports`) ? 'text-white bg-white/5' : 'text-text-secondary hover:text-white hover:bg-white/5'}`}
                 >
