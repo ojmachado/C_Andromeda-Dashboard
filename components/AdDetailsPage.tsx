@@ -45,7 +45,6 @@ export const AdDetailsPage = ({ workspaces, sdkReady, isLoading }: { workspaces:
             
             // Wait for SDK
             if (!sdkReady || !window.FB) {
-                // Don't set error yet, keep loading state until timeout or ready
                 return;
             }
 
@@ -65,7 +64,6 @@ export const AdDetailsPage = ({ workspaces, sdkReady, isLoading }: { workspaces:
                 if (customDates.start && customDates.end) {
                     timeParams.time_range = JSON.stringify({ since: customDates.start, until: customDates.end });
                 } else {
-                    // Fallback if custom dates not set yet
                     timeParams.date_preset = 'last_30d'; 
                 }
             } else if (dateRange !== 'maximum') {
@@ -73,27 +71,21 @@ export const AdDetailsPage = ({ workspaces, sdkReady, isLoading }: { workspaces:
             }
 
             try {
-                // 1. Fetch Ad Metadata & Creative ID & Link Fields
+                // 1. Fetch Ad Metadata (Expanded fields for robustness)
                 const adPromise = new Promise<any>((resolve) => {
                     window.FB.api(`/${adId}`, {
-                        fields: 'name,status,preview_shareable_link,effective_object_story_id,creative{id,instagram_permalink_url}',
+                        fields: 'name,status,objective,preview_shareable_link,effective_object_story_id,creative{id,instagram_permalink_url,thumbnail_url,image_url}',
                         ...apiParams
                     }, resolve);
                 });
 
-                // 2. Fetch Insights (Overall)
+                // 2. Fetch Insights
                 const insightsPromise = new Promise<any>((resolve) => {
                     window.FB.api(`/${adId}/insights`, {
                         fields: 'spend,impressions,clicks,ctr,cpc,cpm,actions,action_values,purchase_roas,cost_per_action_type,date_start,date_stop',
                         ...apiParams,
                         ...timeParams
-                    }, (res: any) => {
-                         if(!res || res.error) {
-                             resolve(res);
-                         } else {
-                             resolve(res);
-                         }
-                    });
+                    }, (res: any) => resolve(res));
                 });
                 
                 // 3. Trend Data
@@ -106,18 +98,16 @@ export const AdDetailsPage = ({ workspaces, sdkReady, isLoading }: { workspaces:
                     }, resolve);
                 });
 
-                // Trigger calls
                 const [adRes, insightsRes, trendRes] = await Promise.all([
                     adPromise,
                     insightsPromise,
                     trendPromise
                 ]);
 
-                // Process Ad & Creative
                 if (adRes && !adRes.error) {
                     setAdMeta(adRes);
                     if (adRes.creative?.id) {
-                        // Fetch Creative Details with extended fields for robustness
+                        // Fetch Creative Details
                         window.FB.api(`/${adRes.creative.id}`, {
                             fields: 'name,title,body,image_url,thumbnail_url,object_story_spec,asset_feed_spec,call_to_action_type,video_id',
                             ...apiParams
@@ -129,17 +119,14 @@ export const AdDetailsPage = ({ workspaces, sdkReady, isLoading }: { workspaces:
                     }
                 }
 
-                // Process Insights
                 if (insightsRes && insightsRes.data && insightsRes.data.length > 0) {
                     setInsights(insightsRes.data[0]);
                 } else {
-                    setInsights(null); // Reset if no data for period
+                    setInsights(null);
                 }
 
-                // Process Trend
                 if (trendRes && trendRes.data) {
                     const rawData = [...trendRes.data];
-                    // Sort properly by ISO date string first to ensure chronological order
                     rawData.sort((a: any, b: any) => new Date(a.date_start).getTime() - new Date(b.date_start).getTime());
 
                     const trend = rawData.map((d: any) => {
@@ -168,95 +155,98 @@ export const AdDetailsPage = ({ workspaces, sdkReady, isLoading }: { workspaces:
     }, [workspaceId, adId, dateRange, customDates, sdkReady]);
 
     // --- Data Parsing Helpers ---
-
-    // Safely extract nested properties
     const get = (obj: any, path: string) => path.split('.').reduce((acc, part) => acc && acc[part], obj);
 
-    // Robust Creative Data Extraction
+    // Enhanced Creative Extraction Logic
     const creativeInfo = useMemo(() => {
-        if (!creative) return { title: '', body: '', image: '', domain: '', type: 'IMAGE', cta: 'Saiba Mais' };
-
-        const spec = creative.object_story_spec;
-        const assetFeed = creative.asset_feed_spec; // Dynamic Ads
-
-        // Helper to extract deeply nested properties safely
-        const extract = (root: any, path: string) => get(root, path);
-
-        let type = 'IMAGE';
-        
-        // 1. Determine Type & Initial Content
-        if (extract(spec, 'video_data') || (assetFeed && extract(assetFeed, 'videos.0'))) {
-            type = 'VIDEO';
-        } else if (extract(spec, 'link_data.child_attachments')) {
-            type = 'CAROUSEL';
-        }
-
-        // 2. Extract Text
-        // Try Object Story Spec (Standard Ads) first as it contains the actual post content
-        let title = extract(spec, 'link_data.name') || extract(spec, 'video_data.title');
-        let body = extract(spec, 'link_data.message') || extract(spec, 'video_data.message');
-        
-        // Try Asset Feed (Dynamic Ads)
-        if (assetFeed) {
-             const firstTitle = extract(assetFeed, 'titles.0.text');
-             const firstBody = extract(assetFeed, 'bodies.0.text'); // Primary Text
-             if (!title) title = firstTitle;
-             if (!body) body = firstBody;
-        }
-
-        // Fallback to top-level fields
-        if (!title) title = creative.title || '';
-        if (!body) body = creative.body || '';
-
-        // 3. Extract Image based on Type
+        // Defaults
+        let title = '';
+        let body = '';
         let image = '';
-        
-        if (type === 'VIDEO') {
-            image = extract(spec, 'video_data.image_url') || 
-                    extract(spec, 'video_data.picture') || 
-                    extract(assetFeed, 'videos.0.thumbnail_url');
-        } else if (type === 'CAROUSEL') {
-            image = extract(spec, 'link_data.child_attachments.0.picture');
-        } else {
-            // Standard Image
-            image = extract(spec, 'link_data.picture') || 
-                    extract(spec, 'photo_data.picture') ||
-                    extract(assetFeed, 'images.0.url');
-        }
-
-        // General Fallback
-        if (!image) image = creative.image_url || creative.thumbnail_url || '';
-
-        // Domain extraction
         let domain = 'LINK';
-        const link = extract(spec, 'link_data.link') || extract(assetFeed, 'link_urls.0.website_url') || extract(spec, 'video_data.call_to_action.value.link');
-        if (link) {
-            try { domain = new URL(link).hostname.replace('www.', '').toUpperCase(); } catch {}
+        let type = 'IMAGE';
+        let cta = 'SAIBA MAIS';
+
+        // 1. Try to use detailed creative object
+        if (creative) {
+            const spec = creative.object_story_spec;
+            const assetFeed = creative.asset_feed_spec;
+            const extract = (root: any, path: string) => get(root, path);
+
+            // Determine Type
+            if (extract(spec, 'video_data') || (assetFeed && extract(assetFeed, 'videos.0'))) {
+                type = 'VIDEO';
+            } else if (extract(spec, 'link_data.child_attachments')) {
+                type = 'CAROUSEL';
+            }
+
+            // Extract Text
+            title = extract(spec, 'link_data.name') || extract(spec, 'video_data.title');
+            body = extract(spec, 'link_data.message') || extract(spec, 'video_data.message');
+            
+            if (assetFeed) {
+                 const firstTitle = extract(assetFeed, 'titles.0.text');
+                 const firstBody = extract(assetFeed, 'bodies.0.text');
+                 if (!title) title = firstTitle;
+                 if (!body) body = firstBody;
+            }
+
+            if (!title) title = creative.title || '';
+            if (!body) body = creative.body || '';
+
+            // Extract Image
+            if (type === 'VIDEO') {
+                image = extract(spec, 'video_data.image_url') || 
+                        extract(spec, 'video_data.picture') || 
+                        extract(assetFeed, 'videos.0.thumbnail_url');
+            } else if (type === 'CAROUSEL') {
+                image = extract(spec, 'link_data.child_attachments.0.picture');
+            } else {
+                image = extract(spec, 'link_data.picture') || 
+                        extract(spec, 'photo_data.picture') ||
+                        extract(assetFeed, 'images.0.url');
+            }
+
+            // High priority fallbacks from creative object
+            if (!image) image = creative.image_url || creative.thumbnail_url || '';
+
+            // Domain
+            const link = extract(spec, 'link_data.link') || extract(assetFeed, 'link_urls.0.website_url') || extract(spec, 'video_data.call_to_action.value.link');
+            if (link) {
+                try { domain = new URL(link).hostname.replace('www.', '').toUpperCase(); } catch {}
+            }
+
+            // CTA
+            cta = creative.call_to_action_type 
+                ? creative.call_to_action_type.replace(/_/g, ' ') 
+                : extract(spec, 'link_data.call_to_action.type') || 'SAIBA MAIS';
         }
 
-        // CTA
-        const cta = creative.call_to_action_type 
-            ? creative.call_to_action_type.replace(/_/g, ' ') 
-            : extract(spec, 'link_data.call_to_action.type') || 'SAIBA MAIS';
+        // 2. Final Fallbacks using Ad Meta (if creative details failed or incomplete)
+        if (!image && adMeta?.creative) {
+            image = adMeta.creative.thumbnail_url || adMeta.creative.image_url || '';
+        }
+        
+        if (!title && adMeta) title = adMeta.name;
 
         return { title, body, image, domain, type, cta };
-    }, [creative]);
+    }, [creative, adMeta]);
 
-    // Derived Links
+    // Links
     const fbLink = adMeta?.effective_object_story_id 
         ? `https://www.facebook.com/${adMeta.effective_object_story_id}` 
         : adMeta?.preview_shareable_link;
     
     const igLink = adMeta?.creative?.instagram_permalink_url;
 
-    // Metrics Calculation
+    // Metrics
     const spend = parseFloat(insights?.spend || '0');
     const impressions = parseInt(insights?.impressions || '0');
     const clicks = parseInt(insights?.clicks || '0');
     const ctr = parseFloat(insights?.ctr || '0');
     const roas = parseFloat(insights?.purchase_roas?.[0]?.value || '0');
 
-    // Action Parsing (Leads, Purchases)
+    // Actions
     const getActionCount = (type: string) => {
         const action = insights?.actions?.find((a: any) => a.action_type === type);
         return action ? parseInt(action.value) : 0;
@@ -267,21 +257,15 @@ export const AdDetailsPage = ({ workspaces, sdkReady, isLoading }: { workspaces:
         return item ? parseFloat(item.value) : 0;
     };
     
-    // Fallback for Purchases (can be pixel purchase or offsite_conversion)
     const purchases = getActionCount('purchase') || getActionCount('offsite_conversion.fb_pixel_purchase');
     const leads = getActionCount('lead') || getActionCount('on_facebook_lead');
-    
-    // Enhanced Messaging check for various attributions
-    // Meta sometimes changes keys, checking both onsite 7d and generic
     const messages = 
         getActionCount('onsite_conversion.messaging_conversation_started_7d') || 
         getActionCount('messaging_conversation_started_7d');
     
-    // Cost per Action Calculations
     const cpa = purchases > 0 ? (spend / purchases) : 0;
     const cpl = leads > 0 ? (spend / leads) : 0;
     
-    // Cost Per Message Strategy: Try API field first, fallback to manual calculation
     let costPerMessage = getCostPerAction('onsite_conversion.messaging_conversation_started_7d') || 
                          getCostPerAction('messaging_conversation_started_7d');
     
@@ -289,34 +273,24 @@ export const AdDetailsPage = ({ workspaces, sdkReady, isLoading }: { workspaces:
         costPerMessage = spend / messages;
     }
 
-    // Generate Smooth Chart Path (Bezier)
+    // Chart Path
     const getSmoothPath = (key: 'spend' | 'conversations', width: number, height: number) => {
         if (trendData.length < 2) return "";
-        
         const values = trendData.map(d => d[key]);
         const maxVal = Math.max(...values, 1); 
-        
-        // Map points to SVG coordinates
         const points = values.map((val, i) => {
             const x = (i / (values.length - 1)) * width;
-            // Pad 5px top and bottom
             const y = height - (val / maxVal) * (height - 10) - 5; 
             return [x, y];
         });
-
-        // Generate Path Command
         let d = `M ${points[0][0]},${points[0][1]}`;
-
         for (let i = 0; i < points.length - 1; i++) {
             const [x0, y0] = points[i];
             const [x1, y1] = points[i + 1];
-            
-            // Control points for smooth bezier (x-midpoint logic)
             const cp1x = x0 + (x1 - x0) * 0.5;
             const cp1y = y0;
             const cp2x = x1 - (x1 - x0) * 0.5;
             const cp2y = y1;
-
             d += ` C ${cp1x},${cp1y} ${cp2x},${cp2y} ${x1},${y1}`;
         }
         return d;
@@ -340,7 +314,7 @@ export const AdDetailsPage = ({ workspaces, sdkReady, isLoading }: { workspaces:
         }
     };
 
-    if (isDataLoading && !creative) { // Only show skeleton on initial load if no data
+    if (isDataLoading && !adMeta) {
         return (
             <AppShell workspaces={workspaces} activeWorkspaceId={workspaceId} isLoading={isLoading}>
                 <div className="p-6 max-w-[1400px] mx-auto space-y-6">
@@ -413,6 +387,11 @@ export const AdDetailsPage = ({ workspaces, sdkReady, isLoading }: { workspaces:
                                     {adMeta.status}
                                 </span>
                             )}
+                            {adMeta?.objective && (
+                                <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20 uppercase tracking-wider">
+                                    {adMeta.objective.replace('OUTCOME_', '').replace(/_/g, ' ')}
+                                </span>
+                            )}
                         </div>
                         <button 
                             onClick={() => navigate(`/w/${workspaceId}/dashboard`)}
@@ -435,7 +414,7 @@ export const AdDetailsPage = ({ workspaces, sdkReady, isLoading }: { workspaces:
                                         {creative?.name?.substring(0,2).toUpperCase() || 'AD'}
                                     </div>
                                     <div className="flex flex-col min-w-0">
-                                        <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{creative?.name || 'Ad Name'}</p>
+                                        <p className="text-xs font-bold text-slate-900 dark:text-white truncate" title={creative?.name}>{creative?.name || adMeta?.name || 'Ad Name'}</p>
                                         <p className="text-[10px] text-slate-500 dark:text-text-secondary">Patrocinado • <span className="material-symbols-outlined text-[10px] align-middle">public</span></p>
                                     </div>
                                     
@@ -477,7 +456,6 @@ export const AdDetailsPage = ({ workspaces, sdkReady, isLoading }: { workspaces:
                                             </a>
                                         )}
                                         
-                                        {/* Type Indicators */}
                                         <div className="border-l border-gray-200 dark:border-[#292348] pl-2 ml-1">
                                             {creativeInfo.type === 'VIDEO' && <span className="material-symbols-outlined text-text-secondary text-sm" title="Vídeo">videocam</span>}
                                             {creativeInfo.type === 'CAROUSEL' && <span className="material-symbols-outlined text-text-secondary text-sm" title="Carrossel">view_carousel</span>}
@@ -486,12 +464,12 @@ export const AdDetailsPage = ({ workspaces, sdkReady, isLoading }: { workspaces:
                                     </div>
                                 </div>
                                 <div className="p-4 pb-2">
-                                    <p className="text-sm text-slate-700 dark:text-gray-300 line-clamp-6 whitespace-pre-wrap leading-relaxed break-words">
-                                        {creativeInfo.body || <span className="text-text-secondary italic">Texto não disponível</span>}
+                                    <p className="text-sm text-slate-700 dark:text-gray-300 line-clamp-6 whitespace-pre-wrap leading-relaxed break-words min-h-[20px]">
+                                        {creativeInfo.body || <span className="text-text-secondary italic opacity-50">Texto não disponível</span>}
                                     </p>
                                 </div>
                                 
-                                {/* Image Container - Aspect Ratio Fix */}
+                                {/* Image Container */}
                                 <div className="w-full relative mt-2 bg-gray-100 dark:bg-black/20 border-y border-gray-100 dark:border-[#292348]/50 min-h-[300px] flex items-center justify-center overflow-hidden">
                                     {creativeInfo.image ? (
                                         <>
@@ -501,34 +479,24 @@ export const AdDetailsPage = ({ workspaces, sdkReady, isLoading }: { workspaces:
                                                 className="w-full h-auto max-h-[600px] object-contain relative z-10"
                                                 loading="lazy"
                                                 referrerPolicy="no-referrer"
+                                                onError={(e) => {
+                                                    // Fallback to placeholder on error
+                                                    e.currentTarget.style.display = 'none';
+                                                    e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                                                }}
                                             />
+                                            {/* Fallback hidden by default, shown on error */}
+                                            <div className="hidden absolute inset-0 flex items-center justify-center text-text-secondary flex-col">
+                                                <span className="material-symbols-outlined text-4xl mb-2 opacity-50">broken_image</span>
+                                                <span className="text-xs">Imagem não carregou</span>
+                                            </div>
                                             
-                                            {/* Video Play Button Overlay */}
                                             {creativeInfo.type === 'VIDEO' && (
                                                 <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/20 group-hover:bg-black/10 transition-colors pointer-events-none">
                                                     <div className="w-16 h-16 bg-white/90 rounded-full flex items-center justify-center shadow-lg backdrop-blur-sm">
                                                         <span className="material-symbols-outlined text-4xl text-black ml-1">play_arrow</span>
                                                     </div>
                                                 </div>
-                                            )}
-
-                                            {/* Carousel Indicators Overlay */}
-                                            {creativeInfo.type === 'CAROUSEL' && (
-                                                <>
-                                                    <div className="absolute inset-0 z-20 pointer-events-none flex items-center justify-between px-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                        <div className="w-8 h-8 rounded-full bg-black/50 flex items-center justify-center text-white backdrop-blur-sm cursor-pointer pointer-events-auto">
-                                                            <span className="material-symbols-outlined text-sm">chevron_left</span>
-                                                        </div>
-                                                        <div className="w-8 h-8 rounded-full bg-black/50 flex items-center justify-center text-white backdrop-blur-sm cursor-pointer pointer-events-auto">
-                                                            <span className="material-symbols-outlined text-sm">chevron_right</span>
-                                                        </div>
-                                                    </div>
-                                                    <div className="absolute bottom-4 left-0 right-0 z-20 flex justify-center gap-1.5 pointer-events-none">
-                                                        <div className="w-2 h-2 rounded-full bg-primary shadow-sm border border-white/20"></div>
-                                                        <div className="w-1.5 h-1.5 rounded-full bg-white/60 shadow-sm backdrop-blur-md"></div>
-                                                        <div className="w-1.5 h-1.5 rounded-full bg-white/60 shadow-sm backdrop-blur-md"></div>
-                                                    </div>
-                                                </>
                                             )}
                                         </>
                                     ) : (
@@ -556,7 +524,6 @@ export const AdDetailsPage = ({ workspaces, sdkReady, isLoading }: { workspaces:
 
                         {/* Col 2 & 3: KPI Grid & Charts */}
                         <div className="xl:col-span-2 flex flex-col gap-6">
-                            
                             {/* KPI Cards */}
                             <div className="flex flex-col gap-4">
                                 <h3 className="text-sm font-semibold text-slate-500 dark:text-text-secondary uppercase tracking-wider">Métricas Principais</h3>
@@ -565,20 +532,8 @@ export const AdDetailsPage = ({ workspaces, sdkReady, isLoading }: { workspaces:
                                     <KpiDetailCard label="Impressões" value={impressions.toLocaleString()} icon="visibility" trend="neutral" />
                                     <KpiDetailCard label="Cliques" value={clicks.toLocaleString()} icon="ads_click" trend="neutral" />
                                     <KpiDetailCard label="CTR" value={`${ctr.toFixed(2)}%`} icon="percent" trend="neutral" />
-                                    
-                                    {/* Requested Messaging KPIs */}
-                                    <KpiDetailCard 
-                                        label="Msgs Iniciadas" 
-                                        value={messages.toLocaleString()} 
-                                        icon="chat" 
-                                        trend="neutral" 
-                                    />
-                                    <KpiDetailCard 
-                                        label="Custo por Msg" 
-                                        value={costPerMessage > 0 ? costPerMessage.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-'} 
-                                        icon="forum" 
-                                        trend="neutral" 
-                                    />
+                                    <KpiDetailCard label="Msgs Iniciadas" value={messages.toLocaleString()} icon="chat" trend="neutral" />
+                                    <KpiDetailCard label="Custo por Msg" value={costPerMessage > 0 ? costPerMessage.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-'} icon="forum" trend="neutral" />
                                 </div>
                             </div>
 
@@ -586,8 +541,6 @@ export const AdDetailsPage = ({ workspaces, sdkReady, isLoading }: { workspaces:
                             <div className="flex flex-col gap-4">
                                 <h3 className="text-sm font-semibold text-slate-500 dark:text-text-secondary uppercase tracking-wider">Conversão e Retorno</h3>
                                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                                    
-                                    {/* Lead Card */}
                                     <div className="bg-white dark:bg-[#1e1b2e] p-4 rounded-xl border border-gray-200 dark:border-[#292348] shadow-sm relative overflow-hidden group">
                                         <div className="absolute inset-0 bg-primary/5 dark:bg-primary/10 group-hover:bg-primary/20 transition-colors"></div>
                                         <div className="relative z-10">
@@ -601,8 +554,6 @@ export const AdDetailsPage = ({ workspaces, sdkReady, isLoading }: { workspaces:
                                             </p>
                                         </div>
                                     </div>
-                                    
-                                    {/* Purchase Card */}
                                     <div className="bg-white dark:bg-[#1e1b2e] p-4 rounded-xl border border-gray-200 dark:border-[#292348] shadow-sm relative overflow-hidden group">
                                         <div className="absolute inset-0 bg-emerald-500/5 dark:bg-emerald-500/10 group-hover:bg-emerald-500/20 transition-colors"></div>
                                         <div className="relative z-10">
@@ -616,8 +567,6 @@ export const AdDetailsPage = ({ workspaces, sdkReady, isLoading }: { workspaces:
                                             </p>
                                         </div>
                                     </div>
-
-                                    {/* CPC/ROAS Row */}
                                     <KpiDetailCard label="CPC" value={parseFloat(insights?.cpc || '0').toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} icon="show_chart" />
                                     <KpiDetailCard label="ROAS" value={`${roas.toFixed(2)}x`} icon="monetization_on" trend={roas > 2 ? 'up' : 'down'} trendColor={roas > 2 ? 'text-emerald-500' : 'text-red-500'} />
                                 </div>
@@ -641,9 +590,7 @@ export const AdDetailsPage = ({ workspaces, sdkReady, isLoading }: { workspaces:
                                     </div>
                                     {isDataLoading && <span className="text-xs text-text-secondary animate-pulse">Atualizando...</span>}
                                 </div>
-                                {/* Pure CSS/SVG Chart */}
                                 <div className="relative w-full h-full flex items-end justify-between px-2 gap-2 mt-4 min-h-[200px]">
-                                    {/* Grid lines background */}
                                     <div className="absolute inset-0 flex flex-col justify-between pointer-events-none opacity-20">
                                         <div className="w-full border-t border-slate-500"></div>
                                         <div className="w-full border-t border-slate-500"></div>
@@ -651,30 +598,10 @@ export const AdDetailsPage = ({ workspaces, sdkReady, isLoading }: { workspaces:
                                         <div className="w-full border-t border-slate-500"></div>
                                         <div className="w-full border-t border-slate-500"></div>
                                     </div>
-                                    {/* SVG Path for Smooth Line */}
                                     {trendData.length > 0 ? (
                                         <svg className="absolute inset-0 h-full w-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 1000 300">
-                                            {/* Spend Line (Primary) */}
-                                            <path 
-                                                d={getSmoothPath('spend', 1000, 300)} 
-                                                fill="none" 
-                                                stroke="#3713ec" 
-                                                strokeLinecap="round" 
-                                                strokeLinejoin="round" 
-                                                strokeWidth="3" 
-                                                vectorEffect="non-scaling-stroke"
-                                            />
-                                            {/* Conversations Line (Secondary) */}
-                                            <path 
-                                                d={getSmoothPath('conversations', 1000, 300)} 
-                                                fill="none" 
-                                                stroke="#34d399" 
-                                                strokeLinecap="round" 
-                                                strokeLinejoin="round" 
-                                                strokeWidth="3" 
-                                                vectorEffect="non-scaling-stroke"
-                                                opacity="0.8"
-                                            />
+                                            <path d={getSmoothPath('spend', 1000, 300)} fill="none" stroke="#3713ec" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" vectorEffect="non-scaling-stroke"/>
+                                            <path d={getSmoothPath('conversations', 1000, 300)} fill="none" stroke="#34d399" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" vectorEffect="non-scaling-stroke" opacity="0.8"/>
                                         </svg>
                                     ) : (
                                         <div className="absolute inset-0 flex items-center justify-center text-text-secondary text-sm border border-dashed border-slate-700 rounded-lg">
@@ -682,7 +609,6 @@ export const AdDetailsPage = ({ workspaces, sdkReady, isLoading }: { workspaces:
                                         </div>
                                     )}
                                 </div>
-                                {/* X Axis Labels (Simplified) */}
                                 {trendData.length > 0 && (
                                     <div className="flex justify-between w-full mt-4 text-[10px] font-mono text-slate-500 dark:text-text-secondary uppercase tracking-widest">
                                         <span>{trendData[0]?.date}</span>
@@ -716,7 +642,6 @@ export const AdDetailsPage = ({ workspaces, sdkReady, isLoading }: { workspaces:
                                             const valueObj = insights.action_values?.find(v => v.action_type === action.action_type);
                                             const totalValue = valueObj ? parseFloat(valueObj.value) : 0;
                                             
-                                            // Cost calculation strategy
                                             let costPer = 0;
                                             const costObj = insights.cost_per_action_type?.find(c => c.action_type === action.action_type);
                                             if (costObj) {
@@ -725,9 +650,7 @@ export const AdDetailsPage = ({ workspaces, sdkReady, isLoading }: { workspaces:
                                                 costPer = spend / count;
                                             }
                                             
-                                            // Icon mapping
                                             let colorClass = 'bg-slate-500';
-                                            
                                             if (action.action_type.includes('purchase')) { colorClass = 'bg-emerald-500'; }
                                             else if (action.action_type.includes('lead')) { colorClass = 'bg-primary'; }
                                             else if (action.action_type.includes('click')) { colorClass = 'bg-blue-400'; }
