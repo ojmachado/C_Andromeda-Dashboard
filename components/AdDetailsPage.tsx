@@ -53,10 +53,10 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
             if (dateRange === 'custom') { /* Handle custom date logic if needed */ }
 
             try {
-                // 1. Fetch Ad Metadata & Creative ID
+                // 1. Fetch Ad Metadata & Creative ID & Link Fields
                 const adPromise = new Promise<any>((resolve) => {
                     window.FB.api(`/${adId}`, {
-                        fields: 'name,status,creative',
+                        fields: 'name,status,preview_shareable_link,effective_object_story_id,creative{id,instagram_permalink_url}',
                         ...apiParams
                     }, resolve);
                 });
@@ -211,6 +211,13 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
 
         return { title, body, image, domain, type };
     }, [creative]);
+
+    // Derived Links
+    const fbLink = adMeta?.effective_object_story_id 
+        ? `https://www.facebook.com/${adMeta.effective_object_story_id}` 
+        : adMeta?.preview_shareable_link;
+    
+    const igLink = adMeta?.creative?.instagram_permalink_url;
 
     // Metrics Calculation
     const spend = parseFloat(insights?.spend || '0');
@@ -382,11 +389,51 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                                         <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{creative?.name || 'Ad Name'}</p>
                                         <p className="text-[10px] text-slate-500 dark:text-text-secondary">Patrocinado • <span className="material-symbols-outlined text-[10px] align-middle">public</span></p>
                                     </div>
-                                    {/* Asset Type Indicator */}
-                                    <div className="ml-auto">
-                                        {creativeInfo.type === 'VIDEO' && <span className="material-symbols-outlined text-text-secondary text-sm" title="Vídeo">videocam</span>}
-                                        {creativeInfo.type === 'CAROUSEL' && <span className="material-symbols-outlined text-text-secondary text-sm" title="Carrossel">view_carousel</span>}
-                                        {creativeInfo.type === 'IMAGE' && <span className="material-symbols-outlined text-text-secondary text-sm" title="Imagem">image</span>}
+                                    
+                                    {/* Action Links */}
+                                    <div className="ml-auto flex items-center gap-1">
+                                        {fbLink && (
+                                            <a 
+                                                href={fbLink} 
+                                                target="_blank" 
+                                                rel="noopener noreferrer" 
+                                                className="text-[#1877F2] hover:bg-[#1877F2]/10 p-1 rounded transition-colors"
+                                                title="Ver no Facebook"
+                                            >
+                                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.791-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+                                            </a>
+                                        )}
+                                        {igLink && (
+                                            <a 
+                                                href={igLink} 
+                                                target="_blank" 
+                                                rel="noopener noreferrer" 
+                                                className="hover:bg-pink-500/10 p-1 rounded transition-colors group/ig"
+                                                title="Ver no Instagram"
+                                            >
+                                                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                    <rect width="24" height="24" rx="6" fill="url(#ig_gradient_preview)" />
+                                                    <circle cx="12" cy="12" r="4" stroke="white" strokeWidth="2" />
+                                                    <circle cx="18" cy="6" r="1.5" fill="white" />
+                                                    <defs>
+                                                        <linearGradient id="ig_gradient_preview" x1="2" y1="22" x2="22" y2="2" gradientUnits="userSpaceOnUse">
+                                                            <stop stopColor="#f09433" />
+                                                            <stop offset="0.25" stopColor="#e6683c" />
+                                                            <stop offset="0.5" stopColor="#dc2743" />
+                                                            <stop offset="0.75" stopColor="#cc2366" />
+                                                            <stop offset="1" stopColor="#bc1888" />
+                                                        </linearGradient>
+                                                    </defs>
+                                                </svg>
+                                            </a>
+                                        )}
+                                        
+                                        {/* Type Indicators */}
+                                        <div className="border-l border-gray-200 dark:border-[#292348] pl-2 ml-1">
+                                            {creativeInfo.type === 'VIDEO' && <span className="material-symbols-outlined text-text-secondary text-sm" title="Vídeo">videocam</span>}
+                                            {creativeInfo.type === 'CAROUSEL' && <span className="material-symbols-outlined text-text-secondary text-sm" title="Carrossel">view_carousel</span>}
+                                            {creativeInfo.type === 'IMAGE' && <span className="material-symbols-outlined text-text-secondary text-sm" title="Imagem">image</span>}
+                                        </div>
                                     </div>
                                 </div>
                                 <div className="p-4 pb-2">
@@ -464,11 +511,24 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                             {/* KPI Cards */}
                             <div className="flex flex-col gap-4">
                                 <h3 className="text-sm font-semibold text-slate-500 dark:text-text-secondary uppercase tracking-wider">Métricas Principais</h3>
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                                     <KpiDetailCard label="Valor Gasto" value={spend.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} icon="payments" trend="up" />
                                     <KpiDetailCard label="Impressões" value={impressions.toLocaleString()} icon="visibility" trend="neutral" />
                                     <KpiDetailCard label="Cliques" value={clicks.toLocaleString()} icon="ads_click" trend="neutral" />
                                     <KpiDetailCard label="CTR" value={`${ctr.toFixed(2)}%`} icon="percent" trend="neutral" />
+                                    {/* New KPIs */}
+                                    <KpiDetailCard 
+                                        label="Msgs Iniciadas" 
+                                        value={messages.toLocaleString()} 
+                                        icon="chat" 
+                                        trend="neutral" 
+                                    />
+                                    <KpiDetailCard 
+                                        label="Custo por Msg" 
+                                        value={costPerMessage > 0 ? costPerMessage.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-'} 
+                                        icon="forum" 
+                                        trend="neutral" 
+                                    />
                                 </div>
                             </div>
 
@@ -507,7 +567,8 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                                         </div>
                                     </div>
 
-                                    {/* Messages Card - NEW ADDITION */}
+                                    {/* Messages Card - Replaced by individual cards above but kept here for complete metrics context if needed, or we can simplify this section now. Leaving as is to not remove functionality unless requested, just enhancing top section. */}
+                                    {/* Actually, user didn't ask to remove this, but showing duplicate data might be confusing. I'll keep it as a summary card for now. */}
                                     <div className="bg-white dark:bg-[#1e1b2e] p-4 rounded-xl border border-gray-200 dark:border-[#292348] shadow-sm relative overflow-hidden group">
                                         <div className="absolute inset-0 bg-sky-500/5 dark:bg-sky-500/10 group-hover:bg-sky-500/20 transition-colors"></div>
                                         <div className="relative z-10">
