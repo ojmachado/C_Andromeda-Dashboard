@@ -1,48 +1,60 @@
 
 import React, { useState, useMemo } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { AppShell } from './Navigation';
-import { Button, Card, Badge } from './UI';
 import type { Workspace, ActivityLog } from '../types';
 
-// Helper to generate mock logs
+// Helper to generate mock logs matching the design
 const generateMockLogs = (count: number): ActivityLog[] => {
-    const actions = ['CREATE', 'UPDATE', 'DELETE', 'LOGIN', 'EXPORT', 'SYNC'] as const;
-    const resources = ['Campanha', 'Conjunto de Anúncios', 'Anúncio', 'Workspace', 'Integração', 'Relatório'];
-    const statuses = ['SUCCESS', 'FAILURE', 'WARNING'] as const;
+    const actions = ['CREATE', 'CONNECT', 'UPDATE', 'DELETE', 'SYNC'] as const;
+    const resources = ['Relatório "Black Friday 2023"', 'Conta Ads 101', 'Permissões de Usuário', 'Workspace Antigo', 'Todos os Workspaces', 'Campanha de Natal'];
     const users = [
-        { name: 'Admin User', email: 'admin@andromedalabs.com' },
-        { name: 'Marketing Team', email: 'marketing@client.com' },
-        { name: 'System Bot', email: 'bot@system.internal' }
+        { name: 'John Doe', email: 'john@andromedalabs.com', initials: 'JD', color: 'blue' },
+        { name: 'Maria Alvez', email: 'maria@client.com', initials: 'MA', color: 'purple' },
+        { name: 'Sarah K.', email: 'sarah@agency.com', initials: 'SK', color: 'orange' },
+        { name: 'System', email: 'auto-generated', initials: 'SY', color: 'gray' }
     ];
 
     return Array.from({ length: count }).map((_, i) => {
         const user = users[Math.floor(Math.random() * users.length)];
-        const action = actions[Math.floor(Math.random() * actions.length)];
+        const action = user.name === 'System' ? 'SYNC' : actions[Math.floor(Math.random() * (actions.length - 1))];
         const date = new Date();
-        date.setHours(date.getHours() - i * 2); // Spread out over time
+        date.setHours(date.getHours() - i * Math.random() * 5);
+
+        let details = '';
+        let resource = resources[Math.floor(Math.random() * resources.length)];
+
+        switch (action) {
+            case 'CREATE': details = 'Criou novo recurso'; break;
+            case 'CONNECT': details = 'Conectou conta do Meta Ads'; resource = 'Conta Ads 101'; break;
+            case 'UPDATE': details = 'Alterou configurações'; break;
+            case 'DELETE': details = 'Removeu item permanentemente'; break;
+            case 'SYNC': details = 'Sincronização automática concluída'; resource = 'Todos os Workspaces'; break;
+        }
 
         return {
             id: `log_${Date.now()}_${i}`,
             timestamp: date.toISOString(),
-            user,
-            action,
-            resource: resources[Math.floor(Math.random() * resources.length)],
-            details: `Executou ação de ${action.toLowerCase()} em ${Math.floor(Math.random() * 10)} itens.`,
-            status: Math.random() > 0.9 ? 'FAILURE' : Math.random() > 0.8 ? 'WARNING' : 'SUCCESS'
+            user: { name: user.name, email: user.email, avatar: user.initials }, // Using avatar field for initials
+            action: action as any, 
+            resource: resource,
+            details: details,
+            status: 'SUCCESS'
         };
     });
 };
 
 export const ActivityLogsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
     const { workspaceId } = useParams();
+    const navigate = useNavigate();
     const [searchTerm, setSearchTerm] = useState('');
     const [actionFilter, setActionFilter] = useState<string>('ALL');
+    const [userFilter, setUserFilter] = useState<string>('ALL');
     const [currentPage, setCurrentPage] = useState(1);
-    const itemsPerPage = 10;
+    const itemsPerPage = 8;
 
-    // Memoize mock data generation to act as "database"
-    const allLogs = useMemo(() => generateMockLogs(65), []);
+    // Memoize mock data generation
+    const allLogs = useMemo(() => generateMockLogs(128), []);
 
     // Filtering
     const filteredLogs = useMemo(() => {
@@ -53,10 +65,11 @@ export const ActivityLogsPage = ({ workspaces }: { workspaces: Workspace[] }) =>
                 log.details.toLowerCase().includes(searchTerm.toLowerCase());
             
             const matchesAction = actionFilter === 'ALL' || log.action === actionFilter;
+            const matchesUser = userFilter === 'ALL' || log.user.name === userFilter;
 
-            return matchesSearch && matchesAction;
+            return matchesSearch && matchesAction && matchesUser;
         });
-    }, [allLogs, searchTerm, actionFilter]);
+    }, [allLogs, searchTerm, actionFilter, userFilter]);
 
     // Pagination
     const totalPages = Math.ceil(filteredLogs.length / itemsPerPage);
@@ -71,157 +84,218 @@ export const ActivityLogsPage = ({ workspaces }: { workspaces: Workspace[] }) =>
         }
     };
 
-    const getActionColor = (action: string) => {
-        switch (action) {
-            case 'CREATE': return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
-            case 'UPDATE': return 'bg-blue-500/10 text-blue-400 border-blue-500/20';
-            case 'DELETE': return 'bg-red-500/10 text-red-400 border-red-500/20';
-            case 'LOGIN': return 'bg-purple-500/10 text-purple-400 border-purple-500/20';
-            case 'SYNC': return 'bg-amber-500/10 text-amber-400 border-amber-500/20';
-            default: return 'bg-slate-500/10 text-slate-400 border-slate-500/20';
-        }
+    // Styling Helpers
+    const getActionBadge = (action: string) => {
+        const styles: Record<string, string> = {
+            'CREATE': 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-500',
+            'CONNECT': 'bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-500',
+            'UPDATE': 'bg-yellow-100 text-yellow-700 dark:bg-yellow-500/10 dark:text-yellow-500',
+            'DELETE': 'bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-500',
+            'SYNC': 'bg-gray-100 text-gray-700 dark:bg-gray-700/30 dark:text-gray-400'
+        };
+        
+        const labels: Record<string, string> = {
+            'CREATE': 'Criar',
+            'CONNECT': 'Conectar',
+            'UPDATE': 'Editar',
+            'DELETE': 'Excluir',
+            'SYNC': 'Sync'
+        };
+
+        return (
+            <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium mr-2 ${styles[action] || styles['SYNC']}`}>
+                {labels[action] || action}
+            </span>
+        );
     };
 
-    const getStatusIcon = (status: string) => {
-        switch (status) {
-            case 'SUCCESS': return <span className="material-symbols-outlined text-emerald-500 text-sm">check_circle</span>;
-            case 'FAILURE': return <span className="material-symbols-outlined text-red-500 text-sm">error</span>;
-            case 'WARNING': return <span className="material-symbols-outlined text-amber-500 text-sm">warning</span>;
-            default: return null;
-        }
+    const getUserColor = (name: string) => {
+        if (name === 'John Doe') return 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400';
+        if (name === 'Maria Alvez') return 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400';
+        if (name === 'Sarah K.') return 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400';
+        return 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400';
     };
 
     return (
         <AppShell workspaces={workspaces} activeWorkspaceId={workspaceId}>
-            <div className="max-w-[1400px] mx-auto py-8 px-6 space-y-8">
-                
-                {/* Header */}
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 border-b border-border-dark pb-6">
-                    <div>
-                        <h1 className="text-3xl font-black text-slate-900 dark:text-white mb-2">Logs de Atividade</h1>
-                        <p className="text-text-secondary">Registro completo de auditoria e ações realizadas neste workspace.</p>
-                    </div>
-                    <Button variant="secondary" onClick={() => alert("Download iniciado (CSV)...")}>
-                        <span className="material-symbols-outlined text-sm">download</span>
-                        Exportar Logs
-                    </Button>
-                </div>
-
-                {/* Filters */}
-                <Card className="p-4 flex flex-col md:flex-row gap-4 items-center justify-between">
-                    <div className="flex items-center gap-4 w-full md:w-auto">
-                        <div className="relative w-full md:w-64">
-                            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary text-sm">search</span>
-                            <input 
-                                type="text" 
-                                placeholder="Buscar por usuário, recurso..." 
-                                className="w-full bg-background-light dark:bg-background-dark border border-slate-200 dark:border-border-dark rounded-lg py-2 pl-9 pr-3 text-sm text-slate-900 dark:text-white focus:border-primary outline-none"
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                            />
-                        </div>
-                        <select 
-                            className="bg-background-light dark:bg-background-dark border border-slate-200 dark:border-border-dark rounded-lg py-2 px-3 text-sm text-slate-900 dark:text-white focus:border-primary outline-none"
-                            value={actionFilter}
-                            onChange={(e) => setActionFilter(e.target.value)}
-                        >
-                            <option value="ALL">Todas Ações</option>
-                            <option value="CREATE">Create</option>
-                            <option value="UPDATE">Update</option>
-                            <option value="DELETE">Delete</option>
-                            <option value="LOGIN">Login</option>
-                            <option value="SYNC">Sync</option>
-                        </select>
-                    </div>
-                    <div className="text-xs text-text-secondary font-mono">
-                        Total de registros: {filteredLogs.length}
-                    </div>
-                </Card>
-
-                {/* Table */}
-                <Card className="overflow-hidden">
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse">
-                            <thead>
-                                <tr className="bg-slate-50 dark:bg-white/5 border-b border-slate-200 dark:border-white/10">
-                                    <th className="px-6 py-4 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Timestamp</th>
-                                    <th className="px-6 py-4 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Usuário</th>
-                                    <th className="px-6 py-4 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Ação</th>
-                                    <th className="px-6 py-4 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Recurso</th>
-                                    <th className="px-6 py-4 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Detalhes</th>
-                                    <th className="px-6 py-4 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest text-right">Status</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100 dark:divide-white/5">
-                                {currentData.length === 0 ? (
-                                    <tr>
-                                        <td colSpan={6} className="px-6 py-12 text-center text-text-secondary">
-                                            Nenhum registro encontrado para os filtros selecionados.
-                                        </td>
-                                    </tr>
-                                ) : (
-                                    currentData.map((log) => (
-                                        <tr key={log.id} className="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
-                                            <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300 whitespace-nowrap font-mono text-xs">
-                                                {new Date(log.timestamp).toLocaleString('pt-BR')}
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <div className="flex items-center gap-2">
-                                                    <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-primary to-purple-500 flex items-center justify-center text-[10px] text-white font-bold">
-                                                        {log.user.name.charAt(0)}
-                                                    </div>
-                                                    <div className="flex flex-col">
-                                                        <span className="text-sm font-medium text-slate-900 dark:text-white">{log.user.name}</span>
-                                                        <span className="text-[10px] text-text-secondary">{log.user.email}</span>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${getActionColor(log.action)}`}>
-                                                    {log.action}
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
-                                                {log.resource}
-                                            </td>
-                                            <td className="px-6 py-4 text-sm text-text-secondary truncate max-w-[200px]" title={log.details}>
-                                                {log.details}
-                                            </td>
-                                            <td className="px-6 py-4 text-right">
-                                                <div className="flex justify-end" title={log.status}>
-                                                    {getStatusIcon(log.status)}
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
+            <div className="flex-1 overflow-y-auto bg-background-light dark:bg-background-dark p-6">
+                <div className="max-w-[1400px] mx-auto flex flex-col gap-6">
                     
-                    {/* Pagination Controls */}
-                    <div className="px-6 py-4 bg-slate-50 dark:bg-white/5 border-t border-slate-200 dark:border-white/10 flex items-center justify-between">
-                        <div className="text-xs text-text-secondary">
-                            Mostrando <span className="font-bold text-slate-900 dark:text-white">{(currentPage - 1) * itemsPerPage + 1}</span> a <span className="font-bold text-slate-900 dark:text-white">{Math.min(currentPage * itemsPerPage, filteredLogs.length)}</span> de <span className="font-bold text-slate-900 dark:text-white">{filteredLogs.length}</span>
+                    {/* Header */}
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                        <div className="flex flex-col">
+                            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Logs de Atividade</h2>
+                            <p className="text-sm text-gray-500 dark:text-text-secondary mt-1">Monitore e audite todas as ações realizadas no seu workspace.</p>
                         </div>
-                        <div className="flex gap-2">
-                            <button 
-                                onClick={() => handlePageChange(currentPage - 1)}
-                                disabled={currentPage === 1}
-                                className="px-3 py-1 text-xs font-medium rounded border border-slate-200 dark:border-border-dark text-slate-600 dark:text-white hover:bg-slate-100 dark:hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                            >
-                                Anterior
-                            </button>
-                            <button 
-                                onClick={() => handlePageChange(currentPage + 1)}
-                                disabled={currentPage === totalPages}
-                                className="px-3 py-1 text-xs font-medium rounded border border-slate-200 dark:border-border-dark text-slate-600 dark:text-white hover:bg-slate-100 dark:hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                            >
-                                Próximo
+                        <button 
+                            onClick={() => navigate(`/w/${workspaceId}/dashboard`)}
+                            className="flex items-center gap-2 text-sm font-medium text-text-secondary hover:text-white transition-colors px-3 py-2 rounded-lg hover:bg-[#292348]"
+                        >
+                            <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+                            Voltar ao Dashboard
+                        </button>
+                    </div>
+
+                    {/* Filters Toolbar */}
+                    <div className="bg-white dark:bg-[#1e1b2e] p-4 rounded-xl border border-gray-200 dark:border-[#292348] shadow-sm flex flex-col lg:flex-row gap-4 items-center justify-between">
+                        <div className="flex flex-1 flex-wrap items-center gap-3 w-full lg:w-auto">
+                            {/* Search */}
+                            <div className="relative w-full lg:w-64">
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-gray-400 text-[18px]">search</span>
+                                <input 
+                                    className="w-full pl-9 pr-3 py-2 bg-gray-50 dark:bg-[#25213a] border border-gray-200 dark:border-[#383355] rounded-lg text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary" 
+                                    placeholder="Buscar por usuário ou recurso..." 
+                                    type="text"
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                />
+                            </div>
+                            
+                            {/* Date Filter (Static for visual) */}
+                            <div className="relative group">
+                                <button className="flex items-center gap-2 bg-gray-50 dark:bg-[#25213a] border border-gray-200 dark:border-[#383355] text-gray-700 dark:text-gray-300 px-3 py-2 rounded-lg text-sm hover:bg-gray-100 dark:hover:bg-[#342c5a] transition-colors">
+                                    <span className="material-symbols-outlined text-[18px]">calendar_today</span>
+                                    <span>Últimos 30 dias</span>
+                                    <span className="material-symbols-outlined text-[16px]">expand_more</span>
+                                </button>
+                            </div>
+
+                            {/* Action Filter */}
+                            <div className="relative group">
+                                <div className="relative">
+                                    <select 
+                                        className="appearance-none flex items-center gap-2 bg-gray-50 dark:bg-[#25213a] border border-gray-200 dark:border-[#383355] text-gray-700 dark:text-gray-300 pl-9 pr-8 py-2 rounded-lg text-sm hover:bg-gray-100 dark:hover:bg-[#342c5a] transition-colors focus:outline-none cursor-pointer"
+                                        value={actionFilter}
+                                        onChange={(e) => setActionFilter(e.target.value)}
+                                    >
+                                        <option value="ALL">Tipo de Ação</option>
+                                        <option value="CREATE">Criar</option>
+                                        <option value="CONNECT">Conectar</option>
+                                        <option value="UPDATE">Editar</option>
+                                        <option value="DELETE">Excluir</option>
+                                        <option value="SYNC">Sync</option>
+                                    </select>
+                                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 material-symbols-outlined text-[18px] text-gray-500 pointer-events-none">category</span>
+                                    <span className="absolute right-2 top-1/2 -translate-y-1/2 material-symbols-outlined text-[16px] text-gray-500 pointer-events-none">expand_more</span>
+                                </div>
+                            </div>
+
+                            {/* User Filter */}
+                            <div className="relative group">
+                                <div className="relative">
+                                    <select 
+                                        className="appearance-none flex items-center gap-2 bg-gray-50 dark:bg-[#25213a] border border-gray-200 dark:border-[#383355] text-gray-700 dark:text-gray-300 pl-9 pr-8 py-2 rounded-lg text-sm hover:bg-gray-100 dark:hover:bg-[#342c5a] transition-colors focus:outline-none cursor-pointer"
+                                        value={userFilter}
+                                        onChange={(e) => setUserFilter(e.target.value)}
+                                    >
+                                        <option value="ALL">Usuário</option>
+                                        <option value="John Doe">John Doe</option>
+                                        <option value="Maria Alvez">Maria Alvez</option>
+                                        <option value="Sarah K.">Sarah K.</option>
+                                        <option value="System">System</option>
+                                    </select>
+                                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 material-symbols-outlined text-[18px] text-gray-500 pointer-events-none">person</span>
+                                    <span className="absolute right-2 top-1/2 -translate-y-1/2 material-symbols-outlined text-[16px] text-gray-500 pointer-events-none">expand_more</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Export Button */}
+                        <div className="flex items-center gap-3 w-full lg:w-auto">
+                            <button className="flex items-center justify-center w-full lg:w-auto gap-2 bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-lg shadow-primary/20">
+                                <span className="material-symbols-outlined text-[18px]">download</span>
+                                <span>Exportar CSV</span>
                             </button>
                         </div>
                     </div>
-                </Card>
+
+                    {/* Table Section */}
+                    <div className="flex flex-col gap-6">
+                        <div className="bg-white dark:bg-[#1e1b2e] rounded-xl border border-gray-200 dark:border-[#292348] shadow-sm overflow-hidden">
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left border-collapse">
+                                    <thead>
+                                        <tr className="border-b border-gray-100 dark:border-[#292348] bg-gray-50 dark:bg-[#25213a]">
+                                            <th className="p-4 text-xs font-semibold text-gray-500 dark:text-text-secondary uppercase tracking-wider w-48">Timestamp</th>
+                                            <th className="p-4 text-xs font-semibold text-gray-500 dark:text-text-secondary uppercase tracking-wider w-56">Usuário</th>
+                                            <th className="p-4 text-xs font-semibold text-gray-500 dark:text-text-secondary uppercase tracking-wider">Ação</th>
+                                            <th className="p-4 text-xs font-semibold text-gray-500 dark:text-text-secondary uppercase tracking-wider">Recurso Afetado</th>
+                                            <th className="p-4 text-xs font-semibold text-gray-500 dark:text-text-secondary uppercase tracking-wider text-right w-20">Detalhes</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100 dark:divide-[#292348]">
+                                        {currentData.length === 0 ? (
+                                            <tr>
+                                                <td colSpan={5} className="p-8 text-center text-text-secondary">
+                                                    Nenhum registro encontrado.
+                                                </td>
+                                            </tr>
+                                        ) : (
+                                            currentData.map((log) => (
+                                                <tr key={log.id} className="group hover:bg-gray-50 dark:hover:bg-[#25213a] transition-colors">
+                                                    <td className="p-4 text-sm font-medium text-gray-900 dark:text-white whitespace-nowrap">
+                                                        <div className="flex flex-col">
+                                                            <span>{new Date(log.timestamp).toLocaleDateString('pt-BR', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                                                            <span className="text-xs text-gray-500 dark:text-gray-400 font-mono">
+                                                                {new Date(log.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                                            </span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-4">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className={`size-8 rounded-full flex items-center justify-center font-bold text-xs ${getUserColor(log.user.name)}`}>
+                                                                {log.user.avatar}
+                                                            </div>
+                                                            <div className="flex flex-col">
+                                                                <span className="text-sm font-medium text-gray-900 dark:text-white">{log.user.name}</span>
+                                                                <span className="text-xs text-gray-500 dark:text-gray-400">ID: {Math.floor(Math.random() * 9000) + 1000}</span>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-4 text-sm text-gray-700 dark:text-gray-300">
+                                                        {getActionBadge(log.action)}
+                                                        {log.details}
+                                                    </td>
+                                                    <td className="p-4 text-sm text-gray-500 dark:text-text-secondary">
+                                                        {log.resource}
+                                                    </td>
+                                                    <td className="p-4 text-right">
+                                                        <button className="text-gray-400 hover:text-primary transition-colors p-1 rounded-md hover:bg-white/5">
+                                                            <span className="material-symbols-outlined text-[20px]">visibility</span>
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                            
+                            {/* Pagination */}
+                            <div className="p-4 border-t border-gray-100 dark:border-[#292348] flex items-center justify-between bg-white dark:bg-[#1e1b2e]">
+                                <p className="text-xs text-gray-500 dark:text-text-secondary">
+                                    Mostrando {(currentPage - 1) * itemsPerPage + 1}-{Math.min(currentPage * itemsPerPage, filteredLogs.length)} de {filteredLogs.length} logs
+                                </p>
+                                <div className="flex gap-2">
+                                    <button 
+                                        onClick={() => handlePageChange(currentPage - 1)}
+                                        disabled={currentPage === 1}
+                                        className="px-3 py-1 rounded text-xs font-medium border border-gray-200 dark:border-[#292348] text-gray-500 dark:text-text-secondary hover:bg-gray-100 dark:hover:bg-[#292348] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        Anterior
+                                    </button>
+                                    <button 
+                                        onClick={() => handlePageChange(currentPage + 1)}
+                                        disabled={currentPage === totalPages}
+                                        className="px-3 py-1 rounded text-xs font-medium border border-gray-200 dark:border-[#292348] text-gray-500 dark:text-text-secondary hover:bg-gray-100 dark:hover:bg-[#292348] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        Próximo
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </AppShell>
     );
