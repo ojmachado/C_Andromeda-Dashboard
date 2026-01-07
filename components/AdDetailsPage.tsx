@@ -21,7 +21,7 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
     const [adMeta, setAdMeta] = useState<any>(null);
     const [creative, setCreative] = useState<AdCreativeData | null>(null);
     const [insights, setInsights] = useState<APIGeneralInsights | null>(null);
-    const [trendData, setTrendData] = useState<{ date: string, value: number }[]>([]);
+    const [trendData, setTrendData] = useState<{ date: string, value: number, rawDate: string }[]>([]);
 
     // Close dropdown on click outside
     useEffect(() => {
@@ -50,6 +50,7 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
             const apiParams = { access_token: token };
             const timeParams: any = { date_preset: dateRange };
             if (dateRange === 'maximum') delete timeParams.date_preset; // Fallback to default if max
+            if (dateRange === 'custom') { /* Handle custom date logic if needed */ }
 
             try {
                 // 1. Fetch Ad Metadata & Creative ID
@@ -104,17 +105,16 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
 
                 // Process Trend
                 if (trendRes && trendRes.data) {
-                    const trend = trendRes.data.map((d: any) => ({
-                        date: new Date(d.date_start).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
-                        value: parseFloat(d.spend || '0')
-                    })).reverse();
+                    const rawData = [...trendRes.data];
                     
-                    // Sort properly by date object to ensure correct order
-                    trend.sort((a: any, b: any) => {
-                        const [dA, mA] = a.date.split('/');
-                        const [dB, mB] = b.date.split('/');
-                        return new Date(2023, parseInt(mA)-1, parseInt(dA)).getTime() - new Date(2023, parseInt(mB)-1, parseInt(dB)).getTime();
-                    });
+                    // Sort properly by ISO date string first to ensure chronological order
+                    rawData.sort((a: any, b: any) => new Date(a.date_start).getTime() - new Date(b.date_start).getTime());
+
+                    const trend = rawData.map((d: any) => ({
+                        date: new Date(d.date_start).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+                        value: parseFloat(d.spend || '0'),
+                        rawDate: d.date_start
+                    }));
                     
                     setTrendData(trend);
                 } else {
@@ -189,16 +189,34 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
     const cpa = purchases > 0 ? spend / purchases : 0;
     const cpl = leads > 0 ? spend / leads : 0;
 
-    // Generate Chart Path
-    const getChartPath = (width: number, height: number) => {
+    // Generate Smooth Chart Path (Bezier)
+    const getSmoothPath = (width: number, height: number) => {
         if (trendData.length < 2) return "";
+        
         const maxVal = Math.max(...trendData.map(d => d.value), 1);
+        // Map points to SVG coordinates
         const points = trendData.map((d, i) => {
             const x = (i / (trendData.length - 1)) * width;
-            const y = height - (d.value / maxVal) * height;
-            return `${x},${y}`;
+            const y = height - (d.value / maxVal) * height; // SVG Y is top-down
+            return [x, y];
         });
-        return `M ${points.join(' L ')}`;
+
+        // Generate Path Command
+        let d = `M ${points[0][0]},${points[0][1]}`;
+
+        for (let i = 0; i < points.length - 1; i++) {
+            const [x0, y0] = points[i];
+            const [x1, y1] = points[i + 1];
+            
+            // Control points for smooth bezier (x-midpoint logic)
+            const cp1x = x0 + (x1 - x0) * 0.5;
+            const cp1y = y0;
+            const cp2x = x1 - (x1 - x0) * 0.5;
+            const cp2y = y1;
+
+            d += ` C ${cp1x},${cp1y} ${cp2x},${cp2y} ${x1},${y1}`;
+        }
+        return d;
     };
 
     const dateLabels: Record<string, string> = {
@@ -210,7 +228,7 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
         'maximum': 'Máximo'
     };
 
-    if (isLoading && !creative) { // Only full load if initial
+    if (isLoading && !creative) { // Only show skeleton on initial load if no data
         return (
             <AppShell workspaces={workspaces} activeWorkspaceId={workspaceId}>
                 <div className="p-6 max-w-[1400px] mx-auto space-y-6">
@@ -244,7 +262,7 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                         <div className="relative" ref={dateDropdownRef}>
                             <button 
                                 onClick={() => setIsDateDropdownOpen(!isDateDropdownOpen)}
-                                className="flex items-center gap-2 bg-white dark:bg-[#292348] hover:bg-gray-100 dark:hover:bg-[#342c5a] text-slate-700 dark:text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors border border-gray-200 dark:border-transparent w-full md:w-auto justify-center"
+                                className="flex items-center gap-2 bg-white dark:bg-[#292348] hover:bg-gray-100 dark:hover:bg-[#342c5a] text-slate-700 dark:text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors border border-gray-200 dark:border-transparent w-full md:w-auto justify-center shadow-sm"
                             >
                                 <span className="material-symbols-outlined text-[18px]">calendar_today</span>
                                 <span>{dateLabels[dateRange] || dateRange}</span>
@@ -270,7 +288,7 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                     {/* Page Heading Action */}
                     <div className="flex flex-wrap items-center justify-between gap-4">
                         <div className="flex items-center gap-4">
-                            <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Detalhes do Anúncio</h2>
+                            <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Performance do Anúncio</h2>
                             {adMeta?.status && (
                                 <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border ${adMeta.status === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-slate-500/10 text-slate-500 border-slate-500/20'}`}>
                                     {adMeta.status}
@@ -282,7 +300,7 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                             className="flex items-center gap-2 text-sm font-medium text-text-secondary hover:text-white transition-colors px-3 py-2 rounded-lg hover:bg-[#292348]"
                         >
                             <span className="material-symbols-outlined text-[18px]">arrow_back</span>
-                            Voltar ao Dashboard
+                            Voltar
                         </button>
                     </div>
 
@@ -293,45 +311,41 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                         <div className="xl:col-span-1 flex flex-col gap-4">
                             <h3 className="text-sm font-semibold text-slate-500 dark:text-text-secondary uppercase tracking-wider">Criativo</h3>
                             <div className="bg-white dark:bg-[#1e1b2e] rounded-xl border border-gray-200 dark:border-[#292348] overflow-hidden shadow-sm">
-                                <div className="p-3 flex items-center gap-3 border-b border-gray-100 dark:border-[#292348]/50">
-                                    <div className="size-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-xs">
+                                <div className="p-3 flex items-center gap-3 border-b border-gray-100 dark:border-[#292348]/50 bg-gray-50 dark:bg-[#25213a]">
+                                    <div className="size-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-xs shadow-md">
                                         {creative?.name?.substring(0,2).toUpperCase() || 'AD'}
                                     </div>
                                     <div className="flex flex-col">
                                         <p className="text-xs font-bold text-slate-900 dark:text-white truncate max-w-[200px]">{creative?.name || 'Ad Name'}</p>
-                                        <p className="text-[10px] text-slate-500 dark:text-text-secondary">Sponsored <span className="material-symbols-outlined text-[10px] align-middle">public</span></p>
+                                        <p className="text-[10px] text-slate-500 dark:text-text-secondary">Patrocinado • <span className="material-symbols-outlined text-[10px] align-middle">public</span></p>
                                     </div>
                                 </div>
-                                <div className="p-3 pb-1">
-                                    <p className="text-sm text-slate-700 dark:text-gray-300 line-clamp-3 whitespace-pre-wrap">
+                                <div className="p-4 pb-2">
+                                    <p className="text-sm text-slate-700 dark:text-gray-300 line-clamp-3 whitespace-pre-wrap leading-relaxed">
                                         {creativeInfo.body || <span className="text-text-secondary italic">Texto não disponível</span>}
                                     </p>
                                 </div>
-                                <div className="w-full aspect-square bg-gray-800 relative mt-2 overflow-hidden bg-center bg-cover" 
+                                <div className="w-full aspect-square bg-gray-900 relative mt-2 overflow-hidden bg-center bg-cover border-y border-gray-100 dark:border-[#292348]/50" 
                                      style={creativeInfo.image ? { backgroundImage: `url("${creativeInfo.image}")` } : {}}
                                 >
                                     {!creativeInfo.image && (
-                                        <div className="absolute inset-0 flex flex-col items-center justify-center text-text-secondary bg-gray-900">
+                                        <div className="absolute inset-0 flex flex-col items-center justify-center text-text-secondary">
                                             <span className="material-symbols-outlined text-4xl mb-2">image_not_supported</span>
-                                            <span className="text-xs">Visualização indisponível</span>
+                                            <span className="text-xs">Preview indisponível</span>
                                         </div>
                                     )}
                                 </div>
-                                <div className="bg-gray-50 dark:bg-[#25213a] p-3 flex justify-between items-center">
+                                <div className="bg-gray-100 dark:bg-[#25213a] p-3 flex justify-between items-center">
                                     <div className="overflow-hidden mr-2">
                                         <p className="text-xs font-semibold text-slate-500 dark:text-text-secondary truncate">{creativeInfo.domain}</p>
-                                        <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{creativeInfo.title || 'Headline não disponível'}</p>
+                                        <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{creativeInfo.title || 'Headline'}</p>
                                     </div>
-                                    <button className="shrink-0 bg-gray-200 dark:bg-[#383355] hover:bg-gray-300 dark:hover:bg-[#454066] text-slate-900 dark:text-white text-xs font-semibold py-1.5 px-3 rounded border border-gray-300 dark:border-transparent transition-colors uppercase">
+                                    <button className="shrink-0 bg-gray-300 dark:bg-[#383355] hover:bg-gray-400 dark:hover:bg-[#454066] text-slate-900 dark:text-white text-xs font-bold py-2 px-4 rounded border border-gray-300 dark:border-transparent transition-colors uppercase">
                                         {creative?.call_to_action_type?.replace(/_/g, ' ') || 'Saiba Mais'}
                                     </button>
                                 </div>
-                                <div className="p-3 flex items-center justify-between text-slate-500 dark:text-text-secondary border-t border-gray-100 dark:border-[#292348]/50 text-xs">
+                                <div className="p-3 flex items-center justify-between text-slate-500 dark:text-text-secondary border-t border-gray-200 dark:border-[#292348]/50 text-[10px] font-mono">
                                      <span>ID: {adId}</span>
-                                     <span className="flex items-center gap-1">
-                                         <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
-                                         Preview
-                                     </span>
                                 </div>
                             </div>
                         </div>
@@ -341,7 +355,7 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                             
                             {/* KPI Cards */}
                             <div className="flex flex-col gap-4">
-                                <h3 className="text-sm font-semibold text-slate-500 dark:text-text-secondary uppercase tracking-wider">Performance ({dateLabels[dateRange]})</h3>
+                                <h3 className="text-sm font-semibold text-slate-500 dark:text-text-secondary uppercase tracking-wider">Métricas Principais</h3>
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                     <KpiDetailCard label="Valor Gasto" value={spend.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} icon="payments" trend="up" />
                                     <KpiDetailCard label="Impressões" value={impressions.toLocaleString()} icon="visibility" trend="neutral" />
@@ -352,7 +366,7 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
 
                             {/* Conversion KPIs */}
                             <div className="flex flex-col gap-4">
-                                <h3 className="text-sm font-semibold text-slate-500 dark:text-text-secondary uppercase tracking-wider">Conversão</h3>
+                                <h3 className="text-sm font-semibold text-slate-500 dark:text-text-secondary uppercase tracking-wider">Conversão e Retorno</h3>
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                     
                                     {/* Lead Card */}
@@ -364,8 +378,8 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                                                 <span className="material-symbols-outlined text-primary/60 text-[18px]">group_add</span>
                                             </div>
                                             <p className="text-xl font-bold text-slate-900 dark:text-white">{leads}</p>
-                                            <p className="text-[10px] mt-2 text-slate-500 dark:text-text-secondary">
-                                                Custo: {cpl > 0 ? cpl.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-'}
+                                            <p className="text-[10px] mt-2 text-slate-500 dark:text-text-secondary font-mono">
+                                                CPL: {cpl > 0 ? cpl.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-'}
                                             </p>
                                         </div>
                                     </div>
@@ -379,8 +393,8 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                                                 <span className="material-symbols-outlined text-emerald-500/60 text-[18px]">shopping_cart</span>
                                             </div>
                                             <p className="text-xl font-bold text-slate-900 dark:text-white">{purchases}</p>
-                                            <p className="text-[10px] mt-2 text-slate-500 dark:text-text-secondary">
-                                                Custo: {cpa > 0 ? cpa.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-'}
+                                            <p className="text-[10px] mt-2 text-slate-500 dark:text-text-secondary font-mono">
+                                                CPA: {cpa > 0 ? cpa.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-'}
                                             </p>
                                         </div>
                                     </div>
@@ -393,7 +407,7 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                             {/* Main Chart */}
                             <div className="bg-white dark:bg-[#1e1b2e] p-6 rounded-xl border border-gray-200 dark:border-[#292348] shadow-sm flex flex-col flex-1 min-h-[300px]">
                                 <div className="flex items-center justify-between mb-6">
-                                    <h3 className="text-base font-bold text-slate-900 dark:text-white">Evolução de Investimento</h3>
+                                    <h3 className="text-base font-bold text-slate-900 dark:text-white">Evolução de Investimento Diário</h3>
                                     {isLoading && <span className="text-xs text-text-secondary animate-pulse">Atualizando...</span>}
                                 </div>
                                 {/* Pure CSS/SVG Chart */}
@@ -411,19 +425,19 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                                         <svg className="absolute inset-0 h-full w-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 1000 300">
                                             <defs>
                                                 <linearGradient id="gradientDetails" x1="0%" x2="0%" y1="0%" y2="100%">
-                                                    <stop offset="0%" stopColor="#3713ec" stopOpacity="0.5"></stop>
+                                                    <stop offset="0%" stopColor="#3713ec" stopOpacity="0.4"></stop>
                                                     <stop offset="100%" stopColor="#3713ec" stopOpacity="0"></stop>
                                                 </linearGradient>
                                             </defs>
                                             {/* Fill Area */}
                                             <path 
-                                                d={`${getChartPath(1000, 300)} L 1000,300 L 0,300 Z`} 
+                                                d={`${getSmoothPath(1000, 300)} L 1000,300 L 0,300 Z`} 
                                                 fill="url(#gradientDetails)" 
                                                 stroke="none"
                                             />
                                             {/* Stroke Line */}
                                             <path 
-                                                d={getChartPath(1000, 300)} 
+                                                d={getSmoothPath(1000, 300)} 
                                                 fill="none" 
                                                 stroke="#3713ec" 
                                                 strokeLinecap="round" 
@@ -431,19 +445,22 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                                                 strokeWidth="3" 
                                                 vectorEffect="non-scaling-stroke"
                                             />
+                                            {/* Data Points on Hover (optional, kept simple for now) */}
                                         </svg>
                                     ) : (
-                                        <div className="absolute inset-0 flex items-center justify-center text-text-secondary text-sm">
+                                        <div className="absolute inset-0 flex items-center justify-center text-text-secondary text-sm border border-dashed border-slate-700 rounded-lg">
                                             {isLoading ? "Carregando..." : "Sem dados de tendência suficientes para este período."}
                                         </div>
                                     )}
                                 </div>
                                 {/* X Axis Labels (Simplified) */}
-                                <div className="flex justify-between w-full mt-2 text-[10px] text-slate-500 dark:text-text-secondary">
-                                    <span>{trendData[0]?.date}</span>
-                                    <span>{trendData[Math.floor(trendData.length / 2)]?.date}</span>
-                                    <span>{trendData[trendData.length - 1]?.date}</span>
-                                </div>
+                                {trendData.length > 0 && (
+                                    <div className="flex justify-between w-full mt-4 text-[10px] font-mono text-slate-500 dark:text-text-secondary uppercase tracking-widest">
+                                        <span>{trendData[0]?.date}</span>
+                                        <span>{trendData[Math.floor(trendData.length / 2)]?.date}</span>
+                                        <span>{trendData[trendData.length - 1]?.date}</span>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -451,7 +468,7 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                     {/* Bottom Section: Actions Table */}
                     <div className="flex flex-col gap-4">
                         <div className="flex flex-wrap items-center justify-between gap-4">
-                            <h3 className="text-sm font-semibold text-slate-500 dark:text-text-secondary uppercase tracking-wider">Ações e Conversões</h3>
+                            <h3 className="text-sm font-semibold text-slate-500 dark:text-text-secondary uppercase tracking-wider">Detalhamento de Conversões</h3>
                         </div>
                         <div className="bg-white dark:bg-[#1e1b2e] rounded-xl border border-gray-200 dark:border-[#292348] shadow-sm overflow-hidden">
                             <div className="overflow-x-auto">
@@ -461,7 +478,7 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                                             <th className="p-4 text-xs font-semibold text-slate-500 dark:text-text-secondary uppercase tracking-wider">Tipo de Evento</th>
                                             <th className="p-4 text-xs font-semibold text-slate-500 dark:text-text-secondary uppercase tracking-wider">Qtd. Total</th>
                                             <th className="p-4 text-xs font-semibold text-slate-500 dark:text-text-secondary uppercase tracking-wider">Valor Estimado</th>
-                                            <th className="p-4 text-xs font-semibold text-slate-500 dark:text-text-secondary uppercase tracking-wider text-right">Custo Médio</th>
+                                            <th className="p-4 text-xs font-semibold text-slate-500 dark:text-text-secondary uppercase tracking-wider text-right">Custo Médio (CPA)</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-100 dark:divide-[#292348]">
@@ -472,29 +489,28 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                                             const costPer = count > 0 ? spend / count : 0;
                                             
                                             // Icon mapping
-                                            let icon = 'event';
                                             let colorClass = 'bg-slate-500';
                                             
-                                            if (action.action_type.includes('purchase')) { icon = 'shopping_cart'; colorClass = 'bg-emerald-500'; }
-                                            else if (action.action_type.includes('lead')) { icon = 'group_add'; colorClass = 'bg-primary'; }
-                                            else if (action.action_type.includes('click')) { icon = 'ads_click'; colorClass = 'bg-blue-400'; }
-                                            else if (action.action_type.includes('view')) { icon = 'visibility'; colorClass = 'bg-purple-500'; }
+                                            if (action.action_type.includes('purchase')) { colorClass = 'bg-emerald-500'; }
+                                            else if (action.action_type.includes('lead')) { colorClass = 'bg-primary'; }
+                                            else if (action.action_type.includes('click')) { colorClass = 'bg-blue-400'; }
+                                            else if (action.action_type.includes('view')) { colorClass = 'bg-purple-500'; }
 
                                             return (
                                                 <tr key={idx} className="group hover:bg-gray-50 dark:hover:bg-[#25213a] transition-colors">
                                                     <td className="p-4">
                                                         <div className="flex items-center gap-2">
-                                                            <span className={`size-2 rounded-full ${colorClass}`}></span>
-                                                            <span className="text-sm text-slate-700 dark:text-gray-200 capitalize">
-                                                                {action.action_type.replace(/_/g, ' ')}
+                                                            <span className={`size-2 rounded-full ${colorClass} shadow-[0_0_8px_currentColor] opacity-80`}></span>
+                                                            <span className="text-sm font-medium text-slate-700 dark:text-gray-200 capitalize">
+                                                                {action.action_type.replace(/_/g, ' ').replace('offsite conversion', '').replace('fb pixel', '')}
                                                             </span>
                                                         </div>
                                                     </td>
-                                                    <td className="p-4 text-sm font-medium text-slate-900 dark:text-white">{count.toLocaleString()}</td>
-                                                    <td className="p-4 text-sm text-slate-500 dark:text-text-secondary">
+                                                    <td className="p-4 text-sm font-bold text-slate-900 dark:text-white">{count.toLocaleString()}</td>
+                                                    <td className="p-4 text-sm text-slate-600 dark:text-slate-300 font-mono">
                                                         {totalValue > 0 ? totalValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '--'}
                                                     </td>
-                                                    <td className="p-4 text-right text-sm font-mono">
+                                                    <td className="p-4 text-right text-sm font-mono text-slate-600 dark:text-slate-300">
                                                         {costPer > 0 ? costPer.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '--'}
                                                     </td>
                                                 </tr>
@@ -502,7 +518,7 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
                                         })}
                                         {(!insights?.actions || insights.actions.length === 0) && (
                                             <tr>
-                                                <td colSpan={4} className="p-6 text-center text-text-secondary text-sm">
+                                                <td colSpan={4} className="p-8 text-center text-text-secondary text-sm">
                                                     Nenhum evento de conversão registrado neste período.
                                                 </td>
                                             </tr>
@@ -520,15 +536,15 @@ export const AdDetailsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
 
 const KpiDetailCard = ({ label, value, icon, trend, trendValue, trendColor }: any) => {
     return (
-        <div className="bg-white dark:bg-[#1e1b2e] p-4 rounded-xl border border-gray-200 dark:border-[#292348] shadow-sm">
-            <div className="flex items-start justify-between mb-2">
-                <p className="text-xs font-medium text-slate-500 dark:text-text-secondary">{label}</p>
-                <span className="material-symbols-outlined text-gray-400 text-[18px]">{icon}</span>
+        <div className="bg-white dark:bg-[#1e1b2e] p-5 rounded-xl border border-gray-200 dark:border-[#292348] shadow-sm hover:border-primary/30 transition-colors group">
+            <div className="flex items-start justify-between mb-3">
+                <p className="text-xs font-bold text-slate-400 dark:text-text-secondary uppercase tracking-widest">{label}</p>
+                <span className="material-symbols-outlined text-gray-300 dark:text-gray-600 text-[20px] group-hover:text-primary transition-colors">{icon}</span>
             </div>
-            <p className="text-xl font-bold text-slate-900 dark:text-white">{value}</p>
+            <p className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">{value}</p>
             {trend && (
-                <div className={`flex items-center gap-1 mt-2 text-xs ${trendColor || 'text-slate-500 dark:text-gray-400'}`}>
-                    <span className="material-symbols-outlined text-[14px]">{trend === 'up' ? 'trending_up' : trend === 'down' ? 'trending_down' : 'remove'}</span>
+                <div className={`flex items-center gap-1 mt-2 text-xs font-bold ${trendColor || 'text-slate-500 dark:text-gray-400'}`}>
+                    <span className="material-symbols-outlined text-[16px]">{trend === 'up' ? 'trending_up' : trend === 'down' ? 'trending_down' : 'remove'}</span>
                     <span>{trendValue || ''}</span>
                 </div>
             )}
