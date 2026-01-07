@@ -490,11 +490,12 @@ const DashboardPage = ({ workspaces, onUpdateWorkspace, sdkReady, isLoading }: {
       }
   };
 
-  const getKpiValue = (key: string) => {
+  const getKpiValue = (config: KpiConfig) => {
+      const key = config.key;
       // Helper to extract value safely from stats object
       // Stats structure depends on the API call result in fetchData
       
-      if (!stats) return { value: '-', trend: 'neutral', subValue: undefined };
+      if (!stats) return { value: '-', trend: undefined, sentiment: undefined, subValue: undefined };
 
       // Helper to parse potential string numbers from API
       const val = (v: any) => typeof v === 'string' ? parseFloat(v) : (typeof v === 'number' ? v : 0);
@@ -502,6 +503,7 @@ const DashboardPage = ({ workspaces, onUpdateWorkspace, sdkReady, isLoading }: {
       let rawValue = 0;
       let formattedValue = '-';
       let trend: 'up' | 'down' | 'neutral' = 'neutral';
+      let sentiment: 'good' | 'bad' | 'neutral' = 'neutral';
       let subValue: string | undefined = undefined;
       
       // Basic extraction
@@ -577,7 +579,27 @@ const DashboardPage = ({ workspaces, onUpdateWorkspace, sdkReady, isLoading }: {
                break;
       }
 
-      return { value: formattedValue, trend, subValue };
+      // --- Trend Logic ---
+      if (workspaceId === 'wk_demo') {
+          // Stable mock generator based on key string
+          const seed = key.split('').reduce((a,b) => a + b.charCodeAt(0), 0);
+          // Simulate a change between -15% and +25%
+          const pctChange = ((seed % 40) - 15); 
+          
+          trend = pctChange >= 0 ? 'up' : 'down';
+          subValue = `${pctChange >= 0 ? '+' : ''}${Math.abs(pctChange)}% vs mês anterior`; // "vs previous month"
+
+          // Determine sentiment
+          if (config.trendCheck === 'high_is_good') {
+              sentiment = pctChange >= 0 ? 'good' : 'bad';
+          } else if (config.trendCheck === 'low_is_good') {
+              sentiment = pctChange <= 0 ? 'good' : 'bad';
+          } else {
+              sentiment = 'neutral';
+          }
+      }
+
+      return { value: formattedValue, trend, sentiment, subValue };
   };
 
   return (
@@ -708,7 +730,7 @@ const DashboardPage = ({ workspaces, onUpdateWorkspace, sdkReady, isLoading }: {
                         ].map((l) => (
                             <button 
                                 key={l.id}
-                                onClick={() => setViewMode(l.id as ViewLevel)} 
+                                onClick={() => setViewLevel(l.id as ViewLevel)} 
                                 className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all whitespace-nowrap ${
                                     viewLevel === l.id 
                                     ? 'bg-primary text-white shadow-sm' 
@@ -756,13 +778,14 @@ const DashboardPage = ({ workspaces, onUpdateWorkspace, sdkReady, isLoading }: {
             {/* Dynamic KPIs based on Template */}
             <KpiGrid>
                 {currentTemplate.kpis.map((kpi: KpiConfig) => {
-                    const data = getKpiValue(kpi.key);
+                    const data = getKpiValue(kpi);
                     return (
                         <KpiCard 
                             key={kpi.key}
                             label={kpi.label} 
                             value={data.value} 
                             trend={data.trend}
+                            sentiment={data.sentiment}
                             subValue={data.subValue}
                             icon={kpi.icon}
                             isLoading={isDataLoading && !isRefreshing} 
@@ -832,118 +855,107 @@ const DashboardPage = ({ workspaces, onUpdateWorkspace, sdkReady, isLoading }: {
   );
 };
 
-// Helper for workspace routes to extract workspace object
-const WorkspaceRouteWrapper = ({ workspaces, render }: { workspaces: Workspace[], render: (w: Workspace) => React.ReactNode }) => {
+// Helper for SetupWizard to extract workspace from params
+const SetupWizardWrapper = ({ workspaces, onUpdate, sdkReady }: { workspaces: Workspace[], onUpdate: (w: Workspace) => void, sdkReady: boolean }) => {
     const { workspaceId } = useParams();
     const ws = workspaces.find(w => w.id === workspaceId);
-    if (!ws) return <div className="p-10 text-center text-white">Workspace não encontrado</div>;
-    return <>{render(ws)}</>;
+    if (!ws) return <Navigate to="/workspaces" />;
+    return <SetupWizard workspace={ws} onUpdateWorkspace={onUpdate} sdkReady={sdkReady} />;
 };
 
-const App = () => {
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [isWorkspacesLoading, setIsWorkspacesLoading] = useState(true);
-  const [sdkReady, setSdkReady] = useState(false);
-  const [session, setSession] = useState(SecureKV.getSession());
+const App: React.FC = () => {
+    const navigate = useNavigate();
+    const [sdkReady, setSdkReady] = useState(false);
+    // Initialize workspaces from localStorage or default
+    const [workspaces, setWorkspaces] = useState<Workspace[]>(() => {
+        const stored = localStorage.getItem('sys:workspaces');
+        return stored ? JSON.parse(stored) : [
+            { id: 'wk_demo', name: 'Demo Store (Moda)', metaConnected: true }
+        ];
+    });
 
-  // Load Workspaces Mock (or from KV if persisted)
-  useEffect(() => {
-      setIsWorkspacesLoading(true);
-      // For demo purposes, we can init some workspaces if none
-      const demoWorkspaces: Workspace[] = [
-          { id: 'wk_demo', name: 'Demo Store', metaConnected: true, preferredTemplateId: 'tpl_ecom' },
-          { id: 'wk_client_a', name: 'Client A', metaConnected: false }
-      ];
-      
-      // Simulate network delay to show loading state
-      const timer = setTimeout(() => {
-          setWorkspaces(demoWorkspaces);
-          setIsWorkspacesLoading(false);
-      }, 1200);
+    // Auth Check
+    useEffect(() => {
+        const session = SecureKV.getSession();
+        const path = window.location.hash.replace('#', '');
+        if (!session && !path.startsWith('/shared/') && path !== '/login') {
+            navigate('/login');
+        }
+    }, [navigate]);
 
-      return () => clearTimeout(timer);
-  }, []);
+    // SDK Init
+    useEffect(() => {
+        const init = async () => {
+            const config = await SecureKV.getMetaConfig();
+            if(config?.appId) {
+                 window.fbAsyncInit = function() {
+                    window.FB.init({
+                      appId      : config.appId,
+                      cookie     : true,
+                      xfbml      : true,
+                      version    : 'v19.0'
+                    });
+                    setSdkReady(true);
+                  };
+                  // Load
+                  (function(d, s, id){
+                     var js, fjs = d.getElementsByTagName(s)[0];
+                     if (d.getElementById(id)) { return; }
+                     js = d.createElement(s) as HTMLScriptElement; js.id = id;
+                     js.src = "https://connect.facebook.net/en_US/sdk.js";
+                     fjs.parentNode!.insertBefore(js, fjs);
+                   }(document, 'script', 'facebook-jssdk'));
+            } else {
+                // If no config, set ready to true so we don't block UI that relies on it to show "Connect" button
+                setSdkReady(true); 
+            }
+        };
+        init();
+    }, []);
 
-  // Init Facebook SDK
-  useEffect(() => {
-      const initSDK = async () => {
-          const config = await SecureKV.getMetaConfig();
-          const appId = config?.appId || '1234567890'; // Default or Mock
+    const handleCreateWorkspace = (name: string) => {
+        const newWs: Workspace = {
+            id: `wk_${Date.now()}`,
+            name,
+            metaConnected: false
+        };
+        const updated = [...workspaces, newWs];
+        setWorkspaces(updated);
+        localStorage.setItem('sys:workspaces', JSON.stringify(updated));
+    };
 
-          window.fbAsyncInit = function() {
-            window.FB.init({
-              appId            : appId,
-              cookie           : true,
-              xfbml            : true,
-              version          : 'v19.0'
-            });
-            setSdkReady(true);
-          };
+    const handleUpdateWorkspace = (ws: Workspace) => {
+        const updated = workspaces.map(w => w.id === ws.id ? ws : w);
+        setWorkspaces(updated);
+        localStorage.setItem('sys:workspaces', JSON.stringify(updated));
+    };
 
-          // Load script
-          (function(d, s, id){
-             var js, fjs = d.getElementsByTagName(s)[0];
-             if (d.getElementById(id)) {return;}
-             js = d.createElement(s) as HTMLScriptElement; js.id = id;
-             js.src = "https://connect.facebook.net/en_US/sdk.js";
-             if (fjs.parentNode) fjs.parentNode.insertBefore(js, fjs);
-           }(document, 'script', 'facebook-jssdk'));
-      };
-      
-      initSDK();
-  }, []);
+    return (
+        <Routes>
+            <Route path="/login" element={<LoginPage onLogin={() => navigate('/workspaces')} />} />
+            
+            {/* Public Shared Routes */}
+            <Route path="/shared/report/:shareId" element={<SharedReportPage />} />
+            <Route path="/shared/dashboard/:shareId" element={<SharedWorkspaceDashboard />} />
 
-  const handleCreateWorkspace = (name: string) => {
-      const newWs: Workspace = {
-          id: `wk_${Date.now()}`,
-          name,
-          metaConnected: false
-      };
-      setWorkspaces([...workspaces, newWs]);
-  };
+            {/* Main App Routes */}
+            <Route path="/workspaces" element={<WorkspacesPage workspaces={workspaces} onCreateWorkspace={handleCreateWorkspace} />} />
+            <Route path="/integrations" element={<IntegrationsPage />} />
+            <Route path="/account" element={<AccountSettingsPage workspaces={workspaces} />} />
 
-  const handleUpdateWorkspace = (updated: Workspace) => {
-      setWorkspaces(prev => prev.map(w => w.id === updated.id ? updated : w));
-  };
-  
-  const handleLogin = () => {
-      setSession(SecureKV.getSession());
-  };
+            {/* Workspace Context Routes */}
+            <Route path="/w/:workspaceId/dashboard" element={<DashboardPage workspaces={workspaces} onUpdateWorkspace={handleUpdateWorkspace} sdkReady={sdkReady} />} />
+            <Route path="/w/:workspaceId/templates" element={<TemplatesPage workspaces={workspaces} />} />
+            <Route path="/w/:workspaceId/reports" element={<CustomReportsPage workspaces={workspaces} />} />
+            <Route path="/w/:workspaceId/team" element={<TeamManagementPage workspaces={workspaces} />} />
+            <Route path="/w/:workspaceId/logs" element={<ActivityLogsPage workspaces={workspaces} />} />
+            <Route path="/w/:workspaceId/ads/:viewLevel/:adId" element={<AdDetailsPage workspaces={workspaces} sdkReady={sdkReady} />} />
+            
+            <Route path="/w/:workspaceId/setup" element={<SetupWizardWrapper workspaces={workspaces} onUpdate={handleUpdateWorkspace} sdkReady={sdkReady} />} />
 
-  return (
-    <Routes>
-        {/* Public Routes */}
-        <Route path="/login" element={!session ? <LoginPage onLogin={handleLogin} /> : <Navigate to="/workspaces" />} />
-        <Route path="/s/:shareId" element={<SharedReportPage />} />
-        <Route path="/shared/dashboard/:shareId" element={<SharedWorkspaceDashboard />} />
-
-        {/* Protected Routes */}
-        {session ? (
-            <>
-                <Route path="/workspaces" element={<WorkspacesPage workspaces={workspaces} onCreateWorkspace={handleCreateWorkspace} />} />
-                <Route path="/integrations" element={<IntegrationsPage />} />
-                <Route path="/account" element={<AccountSettingsPage workspaces={workspaces} />} />
-                
-                {/* Workspace Specific */}
-                <Route path="/w/:workspaceId/dashboard" element={<DashboardPage workspaces={workspaces} onUpdateWorkspace={handleUpdateWorkspace} sdkReady={sdkReady} isLoading={isWorkspacesLoading} />} />
-                <Route path="/w/:workspaceId/templates" element={<TemplatesPage workspaces={workspaces} isLoading={isWorkspacesLoading} />} />
-                <Route path="/w/:workspaceId/setup" element={
-                    <WorkspaceRouteWrapper workspaces={workspaces} render={(ws) => (
-                        <SetupWizard workspace={ws} onUpdateWorkspace={handleUpdateWorkspace} sdkReady={sdkReady} />
-                    )} />
-                } />
-                <Route path="/w/:workspaceId/reports" element={<CustomReportsPage workspaces={workspaces} isLoading={isWorkspacesLoading} />} />
-                <Route path="/w/:workspaceId/team" element={<TeamManagementPage workspaces={workspaces} isLoading={isWorkspacesLoading} />} />
-                <Route path="/w/:workspaceId/logs" element={<ActivityLogsPage workspaces={workspaces} isLoading={isWorkspacesLoading} />} />
-                <Route path="/w/:workspaceId/ads/:viewLevel/:adId" element={<AdDetailsPage workspaces={workspaces} sdkReady={sdkReady} isLoading={isWorkspacesLoading} />} />
-
-                <Route path="/" element={<Navigate to="/workspaces" />} />
-            </>
-        ) : (
-            <Route path="*" element={<Navigate to="/login" />} />
-        )}
-    </Routes>
-  );
+            <Route path="/" element={<Navigate to="/workspaces" />} />
+        </Routes>
+    );
 };
 
 export default App;

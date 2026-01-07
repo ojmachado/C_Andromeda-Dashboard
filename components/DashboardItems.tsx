@@ -8,28 +8,38 @@ interface KpiCardProps {
     value: string;
     subValue?: string;
     trend?: 'up' | 'down' | 'neutral';
+    sentiment?: 'good' | 'bad' | 'neutral';
     icon?: string;
     isLoading?: boolean;
 }
 
-export const KpiCard: React.FC<KpiCardProps> = ({ label, value, subValue, trend, icon = 'equalizer', isLoading }) => {
-    const trendColor = trend === 'up' ? 'text-emerald-400' : trend === 'down' ? 'text-rose-400' : 'text-slate-400';
+export const KpiCard: React.FC<KpiCardProps> = ({ label, value, subValue, trend, sentiment = 'neutral', icon = 'equalizer', isLoading }) => {
+    let trendColor = 'text-slate-400';
+    let trendBg = 'bg-slate-500/10';
+
+    if (sentiment === 'good') {
+        trendColor = 'text-emerald-400';
+        trendBg = 'bg-emerald-500/10';
+    } else if (sentiment === 'bad') {
+        trendColor = 'text-rose-400';
+        trendBg = 'bg-rose-500/10';
+    }
+
     const trendIcon = trend === 'up' ? 'trending_up' : trend === 'down' ? 'trending_down' : 'remove';
-    const trendBg = trend === 'up' ? 'bg-emerald-500/10' : trend === 'down' ? 'bg-rose-500/10' : 'bg-slate-500/10';
 
     return (
-        <Card className="p-5 relative overflow-hidden group">
+        <Card className="p-5 relative overflow-hidden group h-full flex flex-col justify-between hover:border-primary/30 transition-colors">
             <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
                 <span className="material-symbols-outlined text-4xl">{icon}</span>
             </div>
-            <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">{label}</div>
+            <div className="text-xs font-bold text-slate-400 dark:text-text-secondary uppercase tracking-widest mb-2">{label}</div>
             {isLoading ? (
                 <Skeleton className="h-8 w-24 my-1" />
             ) : (
                 <div className="flex flex-col gap-1 relative z-10">
-                    <div className="text-2xl font-bold text-slate-900 dark:text-white">{value}</div>
+                    <div className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">{value}</div>
                     {subValue && (
-                        <div className={`flex items-center gap-1.5 text-xs font-medium w-fit px-1.5 py-0.5 rounded ${trendBg} ${trendColor}`}>
+                        <div className={`flex items-center gap-1.5 text-[10px] font-bold w-fit px-2 py-0.5 rounded-md ${trendBg} ${trendColor} mt-1`}>
                             <span className="material-symbols-outlined text-[14px]">{trendIcon}</span>
                             {subValue}
                         </div>
