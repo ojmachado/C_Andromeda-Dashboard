@@ -1,25 +1,56 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AppShell } from './Navigation';
-import type { Workspace } from '../types';
+import { SecureKV } from '../utils/kv';
+import type { Workspace, UserProfile } from '../types';
 
 export const AccountSettingsPage = ({ workspaces }: { workspaces: Workspace[] }) => {
-    const [name, setName] = useState("Carlos Eduardo Silva");
-    const [role, setRole] = useState("Gestor de Tráfego");
-    const [twoFactor, setTwoFactor] = useState(true);
-    const [language, setLanguage] = useState("pt-BR");
-    const [timezone, setTimezone] = useState("utc-3");
+    const navigate = useNavigate();
+    const [profile, setProfile] = useState<UserProfile | null>(null);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [showSuccess, setShowSuccess] = useState(false);
+
+    useEffect(() => {
+        setProfile(SecureKV.getUserProfile());
+    }, []);
+
+    const handleSave = () => {
+        if (profile) {
+            SecureKV.saveUserProfile(profile);
+            setShowSuccess(true);
+            setTimeout(() => setShowSuccess(false), 3000);
+        }
+    };
+
+    const handleDeleteAccount = () => {
+        SecureKV.clearAll();
+        navigate('/login');
+    };
+
+    const updateProfile = (key: keyof UserProfile, value: any) => {
+        setProfile(prev => prev ? ({ ...prev, [key]: value }) : null);
+    };
+
+    if (!profile) return null;
 
     return (
         <AppShell workspaces={workspaces}>
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
                 {/* Page Header */}
-                <div className="mb-10">
-                    <h1 className="text-3xl md:text-4xl font-black leading-tight tracking-[-0.033em] mb-2 text-slate-900 dark:text-white">Configurações da Conta</h1>
-                    <p className="text-gray-500 dark:text-text-secondary text-base font-normal max-w-2xl">
-                        Gerencie suas informações pessoais, segurança e preferências de sistema do seu workspace no Andromeda Lab.
-                    </p>
+                <div className="mb-10 flex justify-between items-start">
+                    <div>
+                        <h1 className="text-3xl md:text-4xl font-black leading-tight tracking-[-0.033em] mb-2 text-slate-900 dark:text-white">Configurações da Conta</h1>
+                        <p className="text-gray-500 dark:text-text-secondary text-base font-normal max-w-2xl">
+                            Gerencie suas informações pessoais, segurança e preferências de sistema do seu workspace no Andromeda Lab.
+                        </p>
+                    </div>
+                    {showSuccess && (
+                        <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 px-4 py-2 rounded-lg flex items-center gap-2 animate-in fade-in slide-in-from-right-4">
+                            <span className="material-symbols-outlined text-sm">check_circle</span>
+                            <span className="text-sm font-bold">Alterações Salvas!</span>
+                        </div>
+                    )}
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -63,7 +94,7 @@ export const AccountSettingsPage = ({ workspaces }: { workspaces: Workspace[] })
                                     <div className="flex-shrink-0">
                                         <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Foto de Perfil</label>
                                         <div className="flex items-center gap-4">
-                                            <div className="w-20 h-20 rounded-full bg-cover bg-center border-2 border-gray-200 dark:border-border-dark" style={{ backgroundImage: 'url("https://lh3.googleusercontent.com/aida-public/AB6AXuCSHc6pLcz1rpkAACQT94UcuSwjOWZcJfiTIwZhsBtUVtdf9Aa5TtVP8tChY2XHBT53wwxDfpib3EOg53Ugsh9M8DU-qfzj8LpQrNtjs1nhJRLwjZ4qCV3cJnPqYRunEsbSjHWpdNtRkvzQZy4jMMPIvk6RlZP1asirxTVcF1goK28d5_JZbKFcC3xI6Pzo-NlBYi7noCE4mGJELT-PyD49qgDEpOJPOIhJCymprMvRyRkr9lSsnboOnbBDZRHahhxiiaHFxpZ1pO8")' }}></div>
+                                            <div className="w-20 h-20 rounded-full bg-cover bg-center border-2 border-gray-200 dark:border-border-dark" style={{ backgroundImage: `url("${profile.avatar}")` }}></div>
                                             <div className="flex flex-col gap-2">
                                                 <button className="px-4 py-2 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 text-sm font-medium rounded-lg text-gray-900 dark:text-white transition-colors">Alterar</button>
                                                 <button className="text-xs text-red-500 hover:text-red-400 font-medium text-left">Remover</button>
@@ -76,8 +107,8 @@ export const AccountSettingsPage = ({ workspaces }: { workspaces: Workspace[] })
                                             <input 
                                                 className="w-full h-11 rounded-lg border-gray-300 dark:border-border-dark bg-gray-50 dark:bg-background-dark text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-primary px-4 outline-none transition-all" 
                                                 type="text" 
-                                                value={name}
-                                                onChange={(e) => setName(e.target.value)}
+                                                value={profile.name}
+                                                onChange={(e) => updateProfile('name', e.target.value)}
                                             />
                                         </label>
                                         <label className="flex flex-col">
@@ -85,8 +116,8 @@ export const AccountSettingsPage = ({ workspaces }: { workspaces: Workspace[] })
                                             <input 
                                                 className="w-full h-11 rounded-lg border-gray-300 dark:border-border-dark bg-gray-50 dark:bg-background-dark text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-primary px-4 outline-none transition-all" 
                                                 type="text" 
-                                                value={role}
-                                                onChange={(e) => setRole(e.target.value)}
+                                                value={profile.role}
+                                                onChange={(e) => updateProfile('role', e.target.value)}
                                             />
                                         </label>
                                         <label className="flex flex-col md:col-span-2">
@@ -96,7 +127,7 @@ export const AccountSettingsPage = ({ workspaces }: { workspaces: Workspace[] })
                                                     className="w-full h-11 rounded-lg border-gray-300 dark:border-border-dark bg-gray-100 dark:bg-white/5 text-gray-500 dark:text-gray-400 px-4 cursor-not-allowed outline-none" 
                                                     readOnly 
                                                     type="email" 
-                                                    value="carlos.silva@andromedalabs.com"
+                                                    value={profile.email}
                                                 />
                                                 <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-[18px]" title="Contate o admin para alterar o email">lock</span>
                                             </div>
@@ -105,7 +136,7 @@ export const AccountSettingsPage = ({ workspaces }: { workspaces: Workspace[] })
                                     </div>
                                 </div>
                                 <div className="flex justify-end pt-4 border-t border-gray-100 dark:border-border-dark">
-                                    <button className="bg-primary hover:bg-primary-dark text-white px-6 py-2.5 rounded-lg text-sm font-bold shadow-lg shadow-primary/25 transition-all flex items-center gap-2">
+                                    <button onClick={handleSave} className="bg-primary hover:bg-primary-dark text-white px-6 py-2.5 rounded-lg text-sm font-bold shadow-lg shadow-primary/25 transition-all flex items-center gap-2">
                                         <span>Salvar Informações</span>
                                     </button>
                                 </div>
@@ -139,12 +170,12 @@ export const AccountSettingsPage = ({ workspaces }: { workspaces: Workspace[] })
                                     <label className="inline-flex items-center cursor-pointer">
                                         <input 
                                             type="checkbox" 
-                                            checked={twoFactor}
-                                            onChange={() => setTwoFactor(!twoFactor)}
+                                            checked={profile.twoFactorEnabled}
+                                            onChange={() => updateProfile('twoFactorEnabled', !profile.twoFactorEnabled)}
                                             className="sr-only peer" 
                                         />
                                         <div className="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 dark:peer-focus:ring-primary/40 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-primary"></div>
-                                        <span className="ms-3 text-sm font-medium text-gray-900 dark:text-gray-300">{twoFactor ? 'Ativado' : 'Desativado'}</span>
+                                        <span className="ms-3 text-sm font-medium text-gray-900 dark:text-gray-300">{profile.twoFactorEnabled ? 'Ativado' : 'Desativado'}</span>
                                     </label>
                                 </div>
                                 {/* Active Sessions */}
@@ -196,8 +227,8 @@ export const AccountSettingsPage = ({ workspaces }: { workspaces: Workspace[] })
                                         <div className="relative">
                                             <select 
                                                 className="w-full h-11 rounded-lg border-gray-300 dark:border-border-dark bg-gray-50 dark:bg-background-dark text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-primary px-4 appearance-none outline-none"
-                                                value={language}
-                                                onChange={(e) => setLanguage(e.target.value)}
+                                                value={profile.language}
+                                                onChange={(e) => updateProfile('language', e.target.value)}
                                             >
                                                 <option value="pt-BR">Português (Brasil)</option>
                                                 <option value="en-US">English (US)</option>
@@ -211,8 +242,8 @@ export const AccountSettingsPage = ({ workspaces }: { workspaces: Workspace[] })
                                         <div className="relative">
                                             <select 
                                                 className="w-full h-11 rounded-lg border-gray-300 dark:border-border-dark bg-gray-50 dark:bg-background-dark text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-primary px-4 appearance-none outline-none"
-                                                value={timezone}
-                                                onChange={(e) => setTimezone(e.target.value)}
+                                                value={profile.timezone}
+                                                onChange={(e) => updateProfile('timezone', e.target.value)}
                                             >
                                                 <option value="utc-3">(GMT-03:00) Brasilia</option>
                                                 <option value="utc-4">(GMT-04:00) Manaus</option>
@@ -224,7 +255,7 @@ export const AccountSettingsPage = ({ workspaces }: { workspaces: Workspace[] })
                                     </label>
                                 </div>
                                 <div className="flex justify-end pt-4 border-t border-gray-100 dark:border-border-dark">
-                                    <button className="bg-primary/10 hover:bg-primary/20 text-primary dark:text-white dark:bg-white/5 dark:hover:bg-white/10 px-6 py-2.5 rounded-lg text-sm font-bold transition-all flex items-center gap-2">
+                                    <button onClick={handleSave} className="bg-primary/10 hover:bg-primary/20 text-primary dark:text-white dark:bg-white/5 dark:hover:bg-white/10 px-6 py-2.5 rounded-lg text-sm font-bold transition-all flex items-center gap-2">
                                         <span>Salvar Preferências</span>
                                     </button>
                                 </div>
@@ -277,7 +308,7 @@ export const AccountSettingsPage = ({ workspaces }: { workspaces: Workspace[] })
                                     Cancelar
                                 </button>
                                 <button 
-                                    onClick={() => { alert('Ação simulada: Conta excluída.'); setShowDeleteModal(false); }}
+                                    onClick={handleDeleteAccount}
                                     className="px-4 py-2 rounded-lg bg-red-600 text-white font-medium text-sm hover:bg-red-700 transition-colors"
                                 >
                                     Sim, excluir conta

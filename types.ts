@@ -14,6 +14,16 @@ export interface User {
   avatar?: string;
 }
 
+export interface UserProfile {
+  name: string;
+  email: string;
+  role: string;
+  avatar: string;
+  twoFactorEnabled: boolean;
+  language: string;
+  timezone: string;
+}
+
 export interface TeamMember {
   id: string;
   email: string;

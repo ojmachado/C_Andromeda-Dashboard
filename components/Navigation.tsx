@@ -2,6 +2,7 @@
 import React from 'react';
 import { Link, useLocation, useParams, useNavigate } from 'react-router-dom';
 import { Badge, Button } from './UI.js';
+import { SecureKV } from '../utils/kv.js';
 import type { Workspace } from '../types.js';
 
 interface AppShellProps {
@@ -15,6 +16,13 @@ export const AppShell: React.FC<AppShellProps> = ({ children, workspaces = [], a
   const location = useLocation();
   const [isSwitcherOpen, setIsSwitcherOpen] = React.useState(false);
   const activeWorkspace = workspaces.find(w => w.id === activeWorkspaceId);
+  const [user, setUser] = React.useState(SecureKV.getUserProfile());
+
+  React.useEffect(() => {
+      const handler = () => setUser(SecureKV.getUserProfile());
+      window.addEventListener('user_profile_updated', handler);
+      return () => window.removeEventListener('user_profile_updated', handler);
+  }, []);
 
   const isActive = (path: string) => location.pathname.startsWith(path);
 
@@ -123,12 +131,19 @@ export const AppShell: React.FC<AppShellProps> = ({ children, workspaces = [], a
           <div className="w-px h-4 bg-border-dark mx-2"></div>
           <Link to="/account" className="flex items-center gap-3 pl-2 cursor-pointer hover:opacity-80 transition-opacity">
             <div className="text-right hidden md:block">
-                <div className="text-xs font-bold text-white">Admin User</div>
-                <div className="text-[10px] text-text-secondary">Pro Plan</div>
+                <div className="text-xs font-bold text-white">{user.name}</div>
+                <div className="text-[10px] text-text-secondary">{user.role}</div>
             </div>
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-purple-600 border border-white/10 flex items-center justify-center text-white shadow-lg">
-               <span className="material-symbols-outlined text-sm">person</span>
-            </div>
+            {user.avatar ? (
+                <div 
+                    className="w-8 h-8 rounded-full border border-white/10 bg-cover bg-center shadow-lg"
+                    style={{ backgroundImage: `url("${user.avatar}")` }}
+                ></div>
+            ) : (
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-purple-600 border border-white/10 flex items-center justify-center text-white shadow-lg">
+                   <span className="material-symbols-outlined text-sm">person</span>
+                </div>
+            )}
           </Link>
         </nav>
       </header>

@@ -1,10 +1,13 @@
 
+import type { UserProfile } from '../types';
+
 const KEYS = {
   META_CONFIG: 'sys:meta_config',
   TOKEN_PREFIX: 'wk:meta_token:',
   CONTEXT_PREFIX: 'wk:meta_context:',
   MASTER_PWD: 'sys:master_hash', // Simulated hash storage
-  AUTH_SESSION: 'sys:auth_session'
+  AUTH_SESSION: 'sys:auth_session',
+  USER_PROFILE: 'sys:user_profile'
 };
 
 export const SecureKV = {
@@ -86,6 +89,40 @@ export const SecureKV = {
     } catch {
       return null;
     }
+  },
+
+  // --- User Profile Management ---
+  getUserProfile: (): UserProfile => {
+    const raw = localStorage.getItem(KEYS.USER_PROFILE);
+    if (raw) {
+        try {
+            return JSON.parse(raw);
+        } catch {
+            // fallback
+        }
+    }
+    
+    // Default / Initial State
+    const session = SecureKV.getSession();
+    return {
+      name: "Carlos Eduardo Silva",
+      email: session?.email || "carlos.silva@andromedalabs.com",
+      role: "Gestor de Tráfego",
+      avatar: "https://lh3.googleusercontent.com/aida-public/AB6AXuCSHc6pLcz1rpkAACQT94UcuSwjOWZcJfiTIwZhsBtUVtdf9Aa5TtVP8tChY2XHBT53wwxDfpib3EOg53Ugsh9M8DU-qfzj8LpQrNtjs1nhJRLwjZ4qCV3cJnPqYRunEsbSjHWpdNtRkvzQZy4jMMPIvk6RlZP1asirxTVcF1goK28d5_JZbKFcC3xI6Pzo-NlBYi7noCE4mGJELT-PyD49qgDEpOJPOIhJCymprMvRyRkr9lSsnboOnbBDZRHahhxiiaHFxpZ1pO8",
+      twoFactorEnabled: true,
+      language: "pt-BR",
+      timezone: "utc-3"
+    };
+  },
+
+  saveUserProfile: (profile: UserProfile) => {
+    localStorage.setItem(KEYS.USER_PROFILE, JSON.stringify(profile));
+    window.dispatchEvent(new Event('user_profile_updated'));
+  },
+
+  clearAll: () => {
+      localStorage.clear();
+      window.dispatchEvent(new Event('sys_logout'));
   },
 
   // Deprecated stub
