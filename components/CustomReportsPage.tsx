@@ -2,12 +2,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { AppShell } from './Navigation';
-import { Button, Card, Badge } from './UI';
+import { Button, Card, Badge, Modal } from './UI';
 import { SecureKV } from '../utils/kv';
 import type { Workspace, CustomReport } from '../types';
 
 // --- Helper: Mock Data Generator based on Config ---
-const generateReportData = (config: CustomReport['config'], type: CustomReport['type']) => {
+export const generateReportData = (config: CustomReport['config'], type: CustomReport['type']) => {
     const { dimension, metrics } = config;
     const isTimeSeries = dimension === 'Dia' || dimension === 'Mês';
     const count = isTimeSeries ? 15 : 6; // 15 days or 6 categories
@@ -37,7 +37,15 @@ const generateReportData = (config: CustomReport['config'], type: CustomReport['
 };
 
 // --- Report Viewer Component ---
-const ReportViewer: React.FC<{ report: CustomReport; onClose: () => void; onEdit: () => void }> = ({ report, onClose, onEdit }) => {
+interface ReportViewerProps {
+    report: CustomReport;
+    onClose?: () => void;
+    onEdit?: () => void;
+    onShare?: () => void;
+    isPublicView?: boolean;
+}
+
+export const ReportViewer: React.FC<ReportViewerProps> = ({ report, onClose, onEdit, onShare, isPublicView = false }) => {
     const data = useMemo(() => generateReportData(report.config, report.type), [report]);
     const primaryMetric = report.config.metrics[0];
 
@@ -50,14 +58,21 @@ const ReportViewer: React.FC<{ report: CustomReport; onClose: () => void; onEdit
         : Math.floor(totalPrimary).toLocaleString();
 
     return (
-        <div className="flex flex-col h-full bg-background-light dark:bg-background-dark overflow-y-auto">
+        <div className={`flex flex-col h-full bg-background-light dark:bg-background-dark overflow-y-auto ${isPublicView ? '' : 'animate-in fade-in'}`}>
             {/* Viewer Header */}
             <div className="bg-white dark:bg-card-dark border-b border-gray-200 dark:border-border-dark px-6 py-4 sticky top-0 z-10">
                 <div className="max-w-[1400px] mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                     <div className="flex items-center gap-4">
-                        <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-white/5 text-gray-500 dark:text-text-secondary transition-colors">
-                            <span className="material-symbols-outlined">arrow_back</span>
-                        </button>
+                        {!isPublicView && (
+                            <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-white/5 text-gray-500 dark:text-text-secondary transition-colors">
+                                <span className="material-symbols-outlined">arrow_back</span>
+                            </button>
+                        )}
+                        {isPublicView && (
+                            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center text-white font-black italic shadow-lg shadow-primary/20">
+                                A
+                            </div>
+                        )}
                         <div>
                             <div className="flex items-center gap-2">
                                 <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{report.name}</h1>
@@ -75,11 +90,20 @@ const ReportViewer: React.FC<{ report: CustomReport; onClose: () => void; onEdit
                             <span className="material-symbols-outlined text-gray-500 text-sm mr-2">calendar_today</span>
                             <span className="text-sm font-medium text-gray-700 dark:text-white">Últimos 30 dias</span>
                         </div>
-                        <Button variant="secondary" onClick={onEdit}>
-                            <span className="material-symbols-outlined text-sm">edit</span> Editar
-                        </Button>
-                        <Button onClick={() => window.print()}>
-                            <span className="material-symbols-outlined text-sm">download</span> Exportar
+                        
+                        {!isPublicView && (
+                            <>
+                                <Button variant="secondary" onClick={onShare} className="gap-1.5">
+                                    <span className="material-symbols-outlined text-sm">share</span> Compartilhar
+                                </Button>
+                                <Button variant="secondary" onClick={onEdit}>
+                                    <span className="material-symbols-outlined text-sm">edit</span> Editar
+                                </Button>
+                            </>
+                        )}
+                        
+                        <Button onClick={() => window.print()} className={isPublicView ? 'bg-primary' : ''}>
+                            <span className="material-symbols-outlined text-sm">download</span> {isPublicView ? 'Baixar PDF' : 'Exportar'}
                         </Button>
                     </div>
                 </div>
@@ -257,6 +281,11 @@ const ReportViewer: React.FC<{ report: CustomReport; onClose: () => void; onEdit
                         )}
                     </div>
                 </Card>
+                {isPublicView && (
+                    <div className="mt-8 text-center text-xs text-text-secondary">
+                        <p>Powered by <span className="font-bold text-white">AndromedaLab</span></p>
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -266,6 +295,11 @@ export const CustomReportsPage = ({ workspaces }: { workspaces: Workspace[] }) =
     const { workspaceId } = useParams();
     const [viewMode, setViewMode] = useState<'list' | 'builder' | 'view'>('list');
     const [reports, setReports] = useState<CustomReport[]>([]);
+    
+    // Share Modal State
+    const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+    const [shareUrl, setShareUrl] = useState('');
+    const [copySuccess, setCopySuccess] = useState(false);
     
     // Builder State
     const [currentReportId, setCurrentReportId] = useState<string | null>(null);
@@ -329,6 +363,9 @@ export const CustomReportsPage = ({ workspaces }: { workspaces: Workspace[] }) =
             author: currentReportId ? (reports.find(r => r.id === currentReportId)?.author || profile.name) : profile.name,
             lastEdited: new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute:'2-digit' }),
             type: vizType,
+            // Preserve existing sharing settings if editing
+            isPublic: currentReportId ? reports.find(r => r.id === currentReportId)?.isPublic : false,
+            shareId: currentReportId ? reports.find(r => r.id === currentReportId)?.shareId : undefined,
             config: {
                 metrics: selectedMetrics,
                 dimension: selectedDimension,
@@ -353,6 +390,41 @@ export const CustomReportsPage = ({ workspaces }: { workspaces: Workspace[] }) =
         setViewMode('list');
     };
 
+    // --- Sharing Logic ---
+    const handleOpenShare = () => {
+        if (!currentViewReport || !workspaceId) return;
+        
+        // Generate shareId if missing
+        if (!currentViewReport.shareId) {
+            const shareId = crypto.randomUUID();
+            const updated = { ...currentViewReport, shareId, isPublic: false };
+            SecureKV.saveCustomReport(workspaceId, updated);
+            setCurrentViewReport(updated); // Update view
+            // Also update list state
+            setReports(prev => prev.map(r => r.id === updated.id ? updated : r));
+        }
+        
+        // Construct Link
+        const link = `${window.location.origin}/#/s/${currentViewReport.shareId || ''}`;
+        setShareUrl(link);
+        setIsShareModalOpen(true);
+    };
+
+    const togglePublicAccess = () => {
+        if (!currentViewReport || !workspaceId) return;
+        
+        const updated = { ...currentViewReport, isPublic: !currentViewReport.isPublic };
+        SecureKV.saveCustomReport(workspaceId, updated);
+        setCurrentViewReport(updated);
+        setReports(prev => prev.map(r => r.id === updated.id ? updated : r));
+    };
+
+    const copyToClipboard = () => {
+        navigator.clipboard.writeText(shareUrl);
+        setCopySuccess(true);
+        setTimeout(() => setCopySuccess(false), 2000);
+    };
+
     const toggleMetric = (metric: string) => {
         setSelectedMetrics(prev => 
             prev.includes(metric) ? prev.filter(m => m !== metric) : [...prev, metric]
@@ -369,7 +441,59 @@ export const CustomReportsPage = ({ workspaces }: { workspaces: Workspace[] }) =
                     report={currentViewReport} 
                     onClose={() => setViewMode('list')}
                     onEdit={() => handleEditReport(currentViewReport)}
+                    onShare={handleOpenShare}
                 />
+                
+                {/* Share Modal */}
+                <Modal isOpen={isShareModalOpen} onClose={() => setIsShareModalOpen(false)} title="Compartilhar Dashboard">
+                    <div className="flex flex-col gap-6">
+                        <div className="bg-blue-500/10 border border-blue-500/20 p-4 rounded-lg flex gap-3">
+                            <span className="material-symbols-outlined text-blue-400">info</span>
+                            <div>
+                                <p className="text-sm text-blue-200 font-bold mb-1">Link Público Não Indexado</p>
+                                <p className="text-xs text-blue-200/70">
+                                    Este link permite que qualquer pessoa visualize este relatório sem fazer login. 
+                                    Ele não aparecerá em motores de busca (Google, Bing).
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center justify-between p-4 bg-background-dark rounded-lg border border-border-dark">
+                            <span className="text-sm font-bold text-white">Acesso Público</span>
+                            <div 
+                                onClick={togglePublicAccess}
+                                className={`w-12 h-6 rounded-full cursor-pointer relative transition-colors ${currentViewReport.isPublic ? 'bg-primary' : 'bg-gray-600'}`}
+                            >
+                                <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-transform ${currentViewReport.isPublic ? 'left-7' : 'left-1'}`}></div>
+                            </div>
+                        </div>
+
+                        {currentViewReport.isPublic && (
+                            <div className="space-y-2 animate-in fade-in">
+                                <label className="text-xs font-bold text-text-secondary uppercase">Link de Compartilhamento</label>
+                                <div className="flex gap-2">
+                                    <input 
+                                        readOnly 
+                                        value={shareUrl} 
+                                        className="flex-1 bg-background-dark border border-border-dark rounded-lg px-4 py-2 text-sm text-text-secondary outline-none focus:border-primary" 
+                                    />
+                                    <button 
+                                        onClick={copyToClipboard}
+                                        className="bg-white/10 hover:bg-white/20 border border-white/10 text-white px-4 rounded-lg flex items-center gap-2 transition-colors"
+                                    >
+                                        <span className="material-symbols-outlined text-[18px]">
+                                            {copySuccess ? 'check' : 'content_copy'}
+                                        </span>
+                                        {copySuccess ? 'Copiado' : 'Copiar'}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                    <div className="flex justify-end pt-6">
+                        <Button onClick={() => setIsShareModalOpen(false)}>Concluído</Button>
+                    </div>
+                </Modal>
             </AppShell>
         );
     }
@@ -444,7 +568,10 @@ export const CustomReportsPage = ({ workspaces }: { workspaces: Workspace[] }) =
                                                             </span>
                                                         </div>
                                                         <div>
-                                                            <div className="text-white font-medium text-sm group-hover:text-primary transition-colors">{report.name}</div>
+                                                            <div className="flex items-center gap-2">
+                                                                <div className="text-white font-medium text-sm group-hover:text-primary transition-colors">{report.name}</div>
+                                                                {report.isPublic && <span className="material-symbols-outlined text-[14px] text-green-400" title="Compartilhado Publicamente">public</span>}
+                                                            </div>
                                                             <div className="text-text-secondary text-xs mt-0.5">Criado por {report.author}</div>
                                                         </div>
                                                     </div>

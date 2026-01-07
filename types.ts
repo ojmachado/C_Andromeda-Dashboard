@@ -153,6 +153,8 @@ export interface CustomReport {
   author: string;
   lastEdited: string;
   type: 'line' | 'bar' | 'pie' | 'table';
+  isPublic?: boolean; // New: Is accessible via shared link
+  shareId?: string;   // New: Unique UUID for sharing
   config: {
     metrics: string[];
     dimension: string;

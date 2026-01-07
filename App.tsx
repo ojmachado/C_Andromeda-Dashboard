@@ -12,6 +12,7 @@ import { CustomReportsPage } from './components/CustomReportsPage';
 import { TeamManagementPage } from './components/TeamManagement';
 import { AccountSettingsPage } from './components/AccountSettingsPage';
 import { LoginPage } from './components/LoginPage';
+import { SharedReportPage } from './components/SharedReportPage';
 import type { Workspace, InsightData, DateRangePreset, APIGeneralInsights } from './types';
 
 declare global {
@@ -759,6 +760,9 @@ const App = () => {
 
     return (
         <Routes>
+            {/* Public Shared Route (Must be before others to match correctly) */}
+            <Route path="/s/:shareId" element={<SharedReportPage />} />
+
             {/* Public Login Route */}
             <Route path="/login" element={
                 isAuthenticated ? <Navigate to="/workspaces" replace /> : <LoginPage onLogin={() => setIsAuthenticated(true)} />

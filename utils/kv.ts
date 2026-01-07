@@ -183,6 +183,26 @@ export const SecureKV = {
       localStorage.setItem(`${KEYS.REPORTS_PREFIX}${workspaceId}`, JSON.stringify(filtered));
   },
 
+  // Simulate Global Lookup for Shared Reports
+  // In a real database, this would just query by shareId.
+  // Here we have to iterate all keys to find it.
+  getSharedReport: (shareId: string): CustomReport | null => {
+      for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith(KEYS.REPORTS_PREFIX)) {
+              const raw = localStorage.getItem(key);
+              if (raw) {
+                  try {
+                      const reports: CustomReport[] = JSON.parse(raw);
+                      const found = reports.find(r => r.shareId === shareId && r.isPublic);
+                      if (found) return found;
+                  } catch {}
+              }
+          }
+      }
+      return null;
+  },
+
   clearAll: () => {
       localStorage.clear();
       window.dispatchEvent(new Event('sys_logout'));
