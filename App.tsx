@@ -6,6 +6,7 @@ import { Button, Card, Badge, Skeleton, Modal } from './components/UI';
 import { KpiCard, KpiGrid, ChartContainer, DataTable } from './components/DashboardItems';
 import { SecureKV } from './utils/kv';
 import { IntegrationsPage, WorkspacesPage, SetupWizard } from './components/SaaSPages';
+import { AdDetailsPage } from './components/AdDetailsPage';
 import type { Workspace, InsightData, DateRangePreset, APIGeneralInsights } from './types';
 
 declare global {
@@ -676,7 +677,9 @@ const App = () => {
       <Route path="/" element={<Navigate to="/workspaces" replace />} />
       <Route path="/workspaces" element={<WorkspacesPage workspaces={workspaces} onCreateWorkspace={handleCreateWorkspace} />} />
       <Route path="/integrations" element={<IntegrationsPage />} />
+      <Route path="/w/:workspaceId/ads/ad/:adId" element={<AdDetailsPage workspaces={workspaces} />} />
       <Route path="/w/:workspaceId/dashboard" element={<DashboardPage workspaces={workspaces} sdkReady={sdkReady} />} />
+      <Route path="/w/:workspaceId/ads/*" element={<DashboardPage workspaces={workspaces} sdkReady={sdkReady} />} />
       <Route path="/w/:workspaceId/setup" element={
         <WorkspaceSetupWrapper workspaces={workspaces} onUpdate={handleUpdateWorkspace} sdkReady={sdkReady} />
       } />
