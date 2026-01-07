@@ -58,27 +58,24 @@ export interface ChartDataPoint {
 export const ChartContainer: React.FC<{ title: string; data?: ChartDataPoint[]; isLoading?: boolean; yAxisLabel?: string }> = ({ title, data = [], isLoading, yAxisLabel }) => {
   const isDualLine = data.length > 0 && typeof data[0].spend === 'number' && typeof data[0].conversations === 'number';
 
-  // Helper for generating path d attribute
-  const getPath = (key: 'value' | 'spend' | 'conversations', width: number, height: number) => {
-      const values = data.map(d => d[key] as number || 0);
-      const max = Math.max(...values, 1); // Avoid division by zero
-      
-      return values.map((val, i) => {
-          const x = (i / (values.length - 1 || 1)) * width;
-          // Normalize value to height (0 to height)
-          const y = height - (val / max) * (height - 20) - 10; // 10px padding top/bottom
-          return `${i === 0 ? 'M' : 'L'} ${x},${y}`;
-      }).join(' ');
+  // Calculate Max Values for Scales
+  const maxSpend = useMemo(() => Math.max(...data.map(x => x.spend || 0), 1), [data]);
+  const maxConv = useMemo(() => Math.max(...data.map(x => x.conversations || 0), 1), [data]);
+
+  // Formatters
+  const formatCurrencyCompact = (val: number) => {
+      if (val >= 1000) return `R$ ${(val/1000).toFixed(1)}k`;
+      return `R$ ${Math.round(val)}`;
   };
 
   // Helper for smooth bezier
   const getSmoothPath = (key: 'value' | 'spend' | 'conversations', width: number, height: number) => {
       const values = data.map(d => d[key] as number || 0);
-      const max = Math.max(...values, 1);
+      const max = key === 'conversations' ? maxConv : (key === 'spend' ? maxSpend : Math.max(...values, 1));
       
       const points = values.map((val, i) => {
           const x = (i / (values.length - 1 || 1)) * width;
-          const y = height - (val / max) * (height - 20) - 10;
+          const y = height - (val / max) * (height - 40) - 20; // Increased padding for labels
           return [x, y];
       });
 
@@ -120,7 +117,7 @@ export const ChartContainer: React.FC<{ title: string; data?: ChartDataPoint[]; 
         )}
       </div>
       
-      <div className="h-64 w-full relative">
+      <div className="h-72 w-full relative">
           {isLoading ? (
              <Skeleton className="w-full h-full rounded-lg" />
           ) : data.length === 0 ? (
@@ -128,47 +125,74 @@ export const ChartContainer: React.FC<{ title: string; data?: ChartDataPoint[]; 
                  Sem dados suficientes para gerar o gráfico.
              </div>
           ) : (
-             <svg viewBox="0 0 1000 250" className="w-full h-full overflow-visible preserve-3d">
-                 {/* Grid lines */}
-                 {[0, 0.25, 0.5, 0.75, 1].map(p => (
-                     <line key={p} x1="0" y1={250 * p} x2="1000" y2={250 * p} stroke="#334155" strokeWidth="1" strokeDasharray="4 4" opacity="0.1" />
-                 ))}
+             <svg viewBox="0 0 1000 280" className="w-full h-full overflow-visible preserve-3d font-sans">
+                 {/* Grid lines & Axis Labels */}
+                 {[0, 0.5, 1].map((p, i) => {
+                     const y = 280 - (280 - 40) * p - 20; // Match point scale logic
+                     return (
+                        <g key={p}>
+                            <line x1="40" y1={y} x2="960" y2={y} stroke="#334155" strokeWidth="1" strokeDasharray="4 4" opacity="0.1" />
+                            {/* Left Axis (Spend) */}
+                            <text x="35" y={y + 4} textAnchor="end" fill="#3713ec" fontSize="10" fontWeight="bold" opacity="0.6">
+                                {formatCurrencyCompact(maxSpend * p)}
+                            </text>
+                            {/* Right Axis (Conversations) - Only if dual */}
+                            {isDualLine && (
+                                <text x="965" y={y + 4} textAnchor="start" fill="#10b981" fontSize="10" fontWeight="bold" opacity="0.6">
+                                    {Math.round(maxConv * p)}
+                                </text>
+                            )}
+                        </g>
+                     );
+                 })}
 
                  {isDualLine ? (
                      <>
                         {/* Spend Line */}
-                        <path d={getSmoothPath('spend', 1000, 250)} fill="none" stroke="#3713ec" strokeWidth="3" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+                        <path d={getSmoothPath('spend', 1000, 280)} fill="none" stroke="#3713ec" strokeWidth="3" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
                         
                         {/* Conversations Line */}
-                        <path d={getSmoothPath('conversations', 1000, 250)} fill="none" stroke="#10b981" strokeWidth="3" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+                        <path d={getSmoothPath('conversations', 1000, 280)} fill="none" stroke="#10b981" strokeWidth="3" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
 
                         {/* Interactive Overlay & Points */}
                         {data.map((d, i) => {
-                             // Re-calculate Y positions for dots matches the path logic
-                             const maxSpend = Math.max(...data.map(x => x.spend || 0), 1);
-                             const maxConv = Math.max(...data.map(x => x.conversations || 0), 1);
-                             
                              const x = (i / (data.length - 1 || 1)) * 1000;
-                             const ySpend = 250 - ((d.spend || 0) / maxSpend) * 230 - 10;
-                             const yConv = 250 - ((d.conversations || 0) / maxConv) * 230 - 10;
+                             const ySpend = 280 - ((d.spend || 0) / maxSpend) * 240 - 20;
+                             const yConv = 280 - ((d.conversations || 0) / maxConv) * 240 - 20;
+
+                             // Logic to declutter labels: Show first, last, and every ~5th point
+                             const density = Math.ceil(data.length / 8); 
+                             const showLabel = i === 0 || i === data.length - 1 || i % density === 0;
 
                              return (
                                  <g key={i} className="group/point">
                                      {/* Invisible hover bar */}
-                                     <rect x={x - 10} y="0" width="20" height="250" fill="transparent" className="cursor-pointer" />
+                                     <rect x={x - 10} y="0" width="20" height="280" fill="transparent" className="cursor-pointer" />
                                      
                                      {/* Vertical Guide Line on Hover */}
-                                     <line x1={x} y1="0" x2={x} y2="250" stroke="white" strokeWidth="1" opacity="0" className="group-hover/point:opacity-20 transition-opacity" />
+                                     <line x1={x} y1="20" x2={x} y2="260" stroke="white" strokeWidth="1" opacity="0" className="group-hover/point:opacity-20 transition-opacity" />
 
                                      {/* Spend Dot */}
-                                     <circle cx={x} cy={ySpend} r="4" fill="#131022" stroke="#3713ec" strokeWidth="2" className="opacity-0 group-hover/point:opacity-100 transition-opacity" />
+                                     <circle cx={x} cy={ySpend} r="4" fill="#131022" stroke="#3713ec" strokeWidth="2" className="opacity-100 transition-opacity" />
                                      
                                      {/* Conv Dot */}
-                                     <circle cx={x} cy={yConv} r="4" fill="#131022" stroke="#10b981" strokeWidth="2" className="opacity-0 group-hover/point:opacity-100 transition-opacity" />
+                                     <circle cx={x} cy={yConv} r="4" fill="#131022" stroke="#10b981" strokeWidth="2" className="opacity-100 transition-opacity" />
 
-                                     {/* Tooltip */}
+                                     {/* Static Labels (Smartly hidden if too dense) */}
+                                     {showLabel && (
+                                         <>
+                                            <text x={x} y={ySpend - 12} textAnchor="middle" fill="#3713ec" fontSize="11" fontWeight="bold" className="drop-shadow-md">
+                                                {formatCurrencyCompact(d.spend || 0)}
+                                            </text>
+                                            <text x={x} y={yConv + 18} textAnchor="middle" fill="#10b981" fontSize="11" fontWeight="bold" className="drop-shadow-md">
+                                                {d.conversations}
+                                            </text>
+                                         </>
+                                     )}
+
+                                     {/* Tooltip (Always shows full details on hover) */}
                                      <foreignObject x={Math.min(Math.max(x - 75, 0), 850)} y="0" width="150" height="100" className="opacity-0 group-hover/point:opacity-100 transition-opacity pointer-events-none z-50">
-                                        <div className="bg-slate-900/95 backdrop-blur-md text-white text-[11px] rounded-lg p-2 shadow-xl border border-slate-700/50 flex flex-col gap-1">
+                                        <div className="bg-slate-900/95 backdrop-blur-md text-white text-[11px] rounded-lg p-2 shadow-xl border border-slate-700/50 flex flex-col gap-1 mt-2">
                                             <div className="font-bold text-slate-300 border-b border-white/10 pb-1 mb-1 text-center">{d.date}</div>
                                             <div className="flex justify-between items-center gap-3">
                                                 <span className="text-[#818cf8]">Investimento:</span>
@@ -187,14 +211,14 @@ export const ChartContainer: React.FC<{ title: string; data?: ChartDataPoint[]; 
                  ) : (
                      // Fallback Single Line
                      <>
-                        <path d={getSmoothPath('value', 1000, 250)} fill="none" stroke="#3713ec" strokeWidth="3" vectorEffect="non-scaling-stroke" />
+                        <path d={getSmoothPath('value', 1000, 280)} fill="none" stroke="#3713ec" strokeWidth="3" vectorEffect="non-scaling-stroke" />
                      </>
                  )}
              </svg>
           )}
       </div>
       {!isLoading && data.length > 0 && (
-          <div className="flex justify-between text-xs text-text-secondary mt-2 font-mono uppercase tracking-widest">
+          <div className="flex justify-between text-xs text-text-secondary mt-2 font-mono uppercase tracking-widest px-8">
               <span>{data[0]?.date}</span>
               <span>{data[Math.floor(data.length/2)]?.date}</span>
               <span>{data[data.length - 1]?.date}</span>
