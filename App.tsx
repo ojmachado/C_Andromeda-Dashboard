@@ -171,7 +171,7 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
           }, (res: any) => resolve(res));
       });
       
-      // 2. Data List (Campaigns/AdSets/Ads)
+      // 2. Metadata List (Campaigns/AdSets/Ads) - NO Insights here to avoid N+1
       const levelPath = viewLevel === 'adset' ? 'adsets' : viewLevel === 'ad' ? 'ads' : 'campaigns';
       
       // Dynamic fields based on view level
@@ -184,24 +184,23 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
           window.FB.api(`/${accountId}/${levelPath}`, { 
               access_token: token, 
               fields: listFields,
-              limit: 500 // Increased limit to show more items
-          }, async (res: any) => {
-               if(!res.data) { resolve(res); return; }
-               const items = res.data;
-               const insightsPromises = items.map((c: any) => new Promise(r => {
-                   window.FB.api(`/${c.id}/insights`, {
-                       access_token: token,
-                       fields: 'spend,impressions,clicks,ctr,cpm,cpc,actions,purchase_roas',
-                       ...apiTimeParams
-                   }, (iRes: any) => r({ ...c, insights: iRes }));
-               }));
-               const results = await Promise.all(insightsPromises);
-               resolve({ data: results });
-          });
+              limit: 1000 // Large limit to capture all active items
+          }, (res: any) => resolve(res));
       });
 
-      // 3. Daily Trend (Spend)
-      const p3 = new Promise<any>((resolve) => {
+      // 3. Batched Insights (Single call using 'level' param)
+      const p3_insights = new Promise<any>((resolve) => {
+          window.FB.api(`/${accountId}/insights`, {
+             access_token: token,
+             level: viewLevel,
+             fields: 'campaign_id,adset_id,ad_id,spend,impressions,clicks,ctr,cpm,cpc,actions,purchase_roas',
+             limit: 1000,
+             ...apiTimeParams
+          }, (res: any) => resolve(res));
+      });
+
+      // 4. Daily Trend (Spend)
+      const p4 = new Promise<any>((resolve) => {
           window.FB.api(`/${accountId}/insights`, { 
               access_token: token, 
               fields: 'spend,date_start',
@@ -211,7 +210,7 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
       });
 
       try {
-          const [insightsRes, listRes, trendRes] = await Promise.all([p1, p2, p3]);
+          const [insightsRes, metadataRes, levelInsightsRes, trendRes] = await Promise.all([p1, p2, p3_insights, p4]);
       
           // Prevent race conditions: if a new request started, ignore this one
           if (requestRef.current !== requestId) return;
@@ -231,14 +230,32 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
               return action ? parseFloat(action.value) : 0;
           };
 
-          // Process List
-          if (listRes && listRes.data) {
-              const formatted = listRes.data.map((c: any) => {
-                  const i: APIGeneralInsights = c.insights?.data?.[0] || {};
+          // Process Metadata & Merge with Insights
+          if (metadataRes && metadataRes.data) {
+              const metadataItems = metadataRes.data;
+              
+              // Create a Map of Insights for O(1) lookup
+              const insightsMap = new Map();
+              if (levelInsightsRes && levelInsightsRes.data) {
+                  levelInsightsRes.data.forEach((item: any) => {
+                      // Determine key based on level
+                      let key;
+                      if (viewLevel === 'campaign') key = item.campaign_id;
+                      else if (viewLevel === 'adset') key = item.adset_id;
+                      else if (viewLevel === 'ad') key = item.ad_id;
+                      
+                      if(key) insightsMap.set(key, item);
+                  });
+              }
+
+              const formatted = metadataItems.map((c: any) => {
+                  // Get insight from map or default to empty
+                  const i: any = insightsMap.get(c.id) || {};
+                  
                   const spend = parseFloat(i.spend || '0');
                   const impressions = parseInt(i.impressions || '0');
                   
-                  const purchaseAction = i.actions?.find(a => a.action_type === 'purchase' || a.action_type === 'offsite_conversion.fb_pixel_purchase');
+                  const purchaseAction = i.actions?.find((a: any) => a.action_type === 'purchase' || a.action_type === 'offsite_conversion.fb_pixel_purchase');
                   const purchases = purchaseAction ? parseFloat(purchaseAction.value) : 0;
                   const roasVal = i.purchase_roas?.[0]?.value ? parseFloat(i.purchase_roas[0].value) : 0;
                   const cpa = purchases > 0 ? spend / purchases : 0;
@@ -280,7 +297,6 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
                   };
               });
               
-              // Show all items regardless of delivery status (removed filter)
               setCampaigns(formatted);
           } else {
               setCampaigns([]);
