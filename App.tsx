@@ -110,7 +110,11 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
                  { id: 'c2', name: '[INSTITUCIONAL][BRANDING][2024]', status: 'PAUSED', objective: 'OUTCOME_AWARENESS', spend: 299.23, impressions: 20569, clicks: 440, ctr: 2.1, cpm: 14.5, cpc: 0.68, roas: 1.5, cpa: 45.00, messages: 13, costPerConversation: 23.01, campaignName: 'Branding 2024' },
                  { id: 'c3', name: '[CONVERSAO][LAL 1%][COMPRADORES]', status: 'ACTIVE', objective: 'OUTCOME_SALES', adPreviewLink: 'https://facebook.com', spend: 500.00, impressions: 9500, clicks: 200, ctr: 2.1, cpm: 52.6, cpc: 2.50, roas: 5.5, cpa: 25.00, messages: 5, costPerConversation: 100, campaignName: 'Sales Conversion' },
                  { id: 'c4', name: '[TESTE][SEM ENTREGA]', status: 'PAUSED', objective: 'OUTCOME_TRAFFIC', spend: 0, impressions: 0, clicks: 0, ctr: 0, cpm: 0, cpc: 0, roas: 0, cpa: 0, messages: 0, costPerConversation: 0, campaignName: 'Tests' }
-             ].map(c => ({...c, detailsLink: `#/w/${workspaceId}/ads/${viewLevel}/${c.id}`}));
+             ].map(c => ({
+                 ...c, 
+                 detailsLink: `#/w/${workspaceId}/ads/${viewLevel}/${c.id}`,
+                 campaignDetailsLink: `#/w/${workspaceId}/ads/campaign/demo_cp_id`
+             }));
              
              // Filter Demo Data (Impressions > 0)
              setCampaigns(demoItems.filter(i => i.impressions > 0));
@@ -143,8 +147,8 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
       // Dynamic fields based on view level
       let listFields = 'id,name,status';
       if (viewLevel === 'campaign') listFields += ',objective';
-      if (viewLevel === 'adset') listFields += ',campaign{objective,name}'; // Added campaign name for context
-      if (viewLevel === 'ad') listFields += ',campaign{objective,name},preview_shareable_link'; // Needed for Ad Links
+      if (viewLevel === 'adset') listFields += ',campaign{id,objective,name}'; // Added campaign ID for linking
+      if (viewLevel === 'ad') listFields += ',campaign{id,objective,name},preview_shareable_link'; // Added campaign ID for linking
 
       const p2 = new Promise<any>((resolve) => {
           window.FB.api(`/${accountId}/${levelPath}`, { 
@@ -209,19 +213,22 @@ const DashboardPage = ({ workspaces, sdkReady }: { workspaces: Workspace[], sdkR
               const messages = getActionVal(i.actions, 'onsite_conversion.messaging_conversation_started_7d');
               const costPerConversation = messages > 0 ? spend / messages : 0;
 
-              // Resolve Objective and Campaign Name
+              // Resolve Objective and Campaign Name/Link
               let objective = c.objective;
               let campaignName = undefined;
+              let campaignDetailsLink = undefined;
               
               if (c.campaign) {
                   if (c.campaign.objective) objective = c.campaign.objective;
                   if (c.campaign.name) campaignName = c.campaign.name;
+                  if (c.campaign.id) campaignDetailsLink = `#/w/${workspaceId}/ads/campaign/${c.campaign.id}`;
               }
 
               return {
                   id: c.id,
                   name: c.name,
-                  campaignName: campaignName,
+                  campaignName,
+                  campaignDetailsLink,
                   status: c.status,
                   objective: objective,
                   adPreviewLink: c.preview_shareable_link || undefined,

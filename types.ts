@@ -31,7 +31,8 @@ export interface MetaAdAccount {
 export interface InsightData {
   id?: string;
   name: string;
-  campaignName?: string; // New: Context for Ad/AdSet levels
+  campaignName?: string; // Context for Ad/AdSet levels
+  campaignDetailsLink?: string; // New: Link to parent campaign
   status?: string;
   objective?: string;
   adPreviewLink?: string;

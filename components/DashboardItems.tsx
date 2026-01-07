@@ -233,11 +233,23 @@ export const DataTable: React.FC<{ data: InsightData[]; isLoading?: boolean }> =
                         <span className="text-slate-700 dark:text-white block mb-1">{row.name}</span>
                     )}
                     
-                    {/* Campaign Context for Ads */}
+                    {/* Campaign Context for Ads - Now with Link */}
                     {row.campaignName && (
                         <div className="flex items-center gap-1 text-[10px] text-text-secondary">
                             <span className="material-symbols-outlined text-[10px] opacity-50">campaign</span>
-                            <span className="truncate max-w-[200px]" title={row.campaignName}>{row.campaignName}</span>
+                            {row.campaignDetailsLink ? (
+                                <a 
+                                    href={row.campaignDetailsLink}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="truncate max-w-[200px] hover:text-primary hover:underline transition-colors"
+                                    title={`Ir para Campanha: ${row.campaignName}`}
+                                >
+                                    {row.campaignName}
+                                </a>
+                            ) : (
+                                <span className="truncate max-w-[200px]" title={row.campaignName}>{row.campaignName}</span>
+                            )}
                         </div>
                     )}
                     
