@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Card, Skeleton } from './UI.js';
 import type { InsightData } from '../types.js';
 
@@ -14,6 +14,24 @@ interface KpiCardProps {
 }
 
 export const KpiCard: React.FC<KpiCardProps> = ({ label, value, subValue, trend, sentiment = 'neutral', icon = 'equalizer', isLoading }) => {
+    const [isMenuOpen, setIsMenuOpen] = useState(false);
+    const menuRef = useRef<HTMLDivElement>(null);
+
+    // Close menu when clicking outside
+    useEffect(() => {
+        function handleClickOutside(event: MouseEvent) {
+            if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+                setIsMenuOpen(false);
+            }
+        }
+        if (isMenuOpen) {
+            document.addEventListener("mousedown", handleClickOutside);
+        }
+        return () => {
+            document.removeEventListener("mousedown", handleClickOutside);
+        };
+    }, [isMenuOpen]);
+
     let trendColor = 'text-slate-400';
     let trendBg = 'bg-slate-500/10';
 
@@ -27,12 +45,66 @@ export const KpiCard: React.FC<KpiCardProps> = ({ label, value, subValue, trend,
 
     const trendIcon = trend === 'up' ? 'trending_up' : trend === 'down' ? 'trending_down' : 'remove';
 
+    const handleCopy = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(value);
+        setIsMenuOpen(false);
+        // Optional: Could dispatch a toast event here
+    };
+
+    const handleDetails = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        console.log(`View details for ${label}`);
+        setIsMenuOpen(false);
+    };
+
     return (
-        <Card className="p-5 relative overflow-hidden group h-full flex flex-col justify-between hover:border-primary/30 transition-colors">
-            <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
-                <span className="material-symbols-outlined text-4xl">{icon}</span>
+        // Added !overflow-visible to override the default Card overflow-hidden, ensuring the menu isn't clipped
+        <Card className="p-5 relative !overflow-visible group h-full flex flex-col justify-between hover:border-primary/30 transition-colors">
+            
+            {/* Decorative Background Icon - Contained to prevent overflow */}
+            <div className="absolute inset-0 overflow-hidden rounded-xl pointer-events-none">
+                <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                    <span className="material-symbols-outlined text-4xl">{icon}</span>
+                </div>
             </div>
-            <div className="text-xs font-bold text-slate-400 dark:text-text-secondary uppercase tracking-widest mb-2">{label}</div>
+
+            {/* Header with Label and Context Menu */}
+            <div className="flex justify-between items-start mb-2 relative z-20">
+                <div className="text-xs font-bold text-slate-400 dark:text-text-secondary uppercase tracking-widest mt-1">{label}</div>
+                
+                {/* Context Menu Trigger */}
+                <div className="relative" ref={menuRef}>
+                    <button 
+                        onClick={(e) => { e.stopPropagation(); setIsMenuOpen(!isMenuOpen); }}
+                        className="text-text-secondary hover:text-white p-1 rounded-md hover:bg-white/10 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+                        title="Opções"
+                    >
+                        <span className="material-symbols-outlined text-[18px]">more_vert</span>
+                    </button>
+
+                    {/* Dropdown Menu */}
+                    {isMenuOpen && (
+                        <div className="absolute right-0 top-full mt-1 w-36 bg-card-dark border border-border-dark rounded-lg shadow-xl py-1 z-50 animate-in fade-in zoom-in-95 duration-100">
+                            <button 
+                                onClick={handleDetails}
+                                className="w-full text-left px-3 py-2 text-xs text-text-secondary hover:text-white hover:bg-white/5 flex items-center gap-2 transition-colors"
+                            >
+                                <span className="material-symbols-outlined text-[14px]">visibility</span>
+                                Ver detalhes
+                            </button>
+                            <button 
+                                onClick={handleCopy}
+                                className="w-full text-left px-3 py-2 text-xs text-text-secondary hover:text-white hover:bg-white/5 flex items-center gap-2 transition-colors"
+                            >
+                                <span className="material-symbols-outlined text-[14px]">content_copy</span>
+                                Copiar valor
+                            </button>
+                        </div>
+                    )}
+                </div>
+            </div>
+
             {isLoading ? (
                 <Skeleton className="h-8 w-24 my-1" />
             ) : (
