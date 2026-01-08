@@ -360,7 +360,13 @@ export const AdDetailsPage = ({ workspaces, sdkReady, isLoading }: { workspaces:
                                 </div>
                                 <div className="w-full relative mt-2 bg-gray-100 dark:bg-black/20 min-h-[200px] flex items-center justify-center overflow-hidden">
                                     {creativeInfo.image ? (
-                                        <img src={creativeInfo.image} alt="Creative" className="w-full h-auto object-cover" onError={(e) => { e.currentTarget.style.display='none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
+                                        <img 
+                                            src={creativeInfo.image} 
+                                            alt="Creative" 
+                                            className="w-full h-auto object-cover" 
+                                            referrerPolicy="no-referrer"
+                                            onError={(e) => { e.currentTarget.style.display='none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} 
+                                        />
                                     ) : null}
                                     <div className={`${creativeInfo.image ? 'hidden' : 'flex'} flex-col items-center justify-center text-gray-400 p-8`}>
                                         <span className="material-symbols-outlined text-4xl mb-2">image_not_supported</span>
