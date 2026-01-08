@@ -46,12 +46,71 @@ export const AdDetailsPage = ({ workspaces, sdkReady, isLoading }: { workspaces:
         const loadData = async () => {
             if (!adId || !workspaceId) return;
             
-            // Wait for SDK
-            if (!sdkReady || !window.FB) {
+            setIsDataLoading(true);
+
+            // --- DEMO DATA HANDLER ---
+            if (workspaceId === 'wk_demo') {
+                await new Promise(resolve => setTimeout(resolve, 800)); // Simulate loading
+                
+                // Mock Metadata
+                setAdMeta({
+                    id: adId,
+                    name: 'Instagram Post: Promoção Natal [V2]',
+                    status: 'ACTIVE',
+                    objective: 'OUTCOME_SALES',
+                    preview_shareable_link: '#'
+                });
+
+                // Mock Creative
+                setCreative({
+                    id: `cre_${adId}`,
+                    name: 'Creative_Xmas_V2',
+                    title: 'Oferta Exclusiva de Natal 🎄',
+                    body: 'Aproveite 50% de desconto em toda a loja. Frete grátis para compras acima de R$ 200. Promoção válida por tempo limitado!',
+                    image_url: 'https://images.unsplash.com/photo-1607083206868-63d860817117?q=80&w=2025&auto=format&fit=crop', // Valid Unsplash Image
+                    thumbnail_url: 'https://images.unsplash.com/photo-1607083206868-63d860817117?q=80&w=200&auto=format&fit=crop',
+                    call_to_action_type: 'SHOP_NOW',
+                    instagram_permalink_url: 'https://instagram.com'
+                });
+
+                // Mock Insights
+                setInsights({
+                    spend: '1240.50',
+                    impressions: '15400',
+                    clicks: '842',
+                    ctr: '2.45',
+                    cpm: '12.50',
+                    cpc: '1.47',
+                    purchase_roas: [{ value: '3.8' }],
+                    actions: [
+                        { action_type: 'lead', value: '45' },
+                        { action_type: 'purchase', value: '12' },
+                        { action_type: 'onsite_conversion.messaging_conversation_started_7d', value: '28' }
+                    ],
+                    date_start: '2023-10-01',
+                    date_stop: '2023-10-31'
+                });
+
+                // Mock Trend
+                const mockTrend = Array.from({length: 15}, (_, i) => ({
+                    date: new Date(Date.now() - (14-i) * 86400000).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+                    spend: Math.random() * 100 + 50,
+                    leads: Math.floor(Math.random() * 10),
+                    purchases: Math.floor(Math.random() * 5),
+                    rawDate: new Date(Date.now() - (14-i) * 86400000).toISOString()
+                }));
+                setTrendData(mockTrend);
+                
+                setIsDataLoading(false);
                 return;
             }
 
-            setIsDataLoading(true);
+            // --- REAL DATA HANDLER ---
+            if (!sdkReady || !window.FB) {
+                // If SDK not ready and not demo, we wait or return
+                return; 
+            }
+
             const token = await SecureKV.getWorkspaceToken(workspaceId);
 
             if (!token) {
@@ -212,6 +271,10 @@ export const AdDetailsPage = ({ workspaces, sdkReady, isLoading }: { workspaces:
         }
 
         if (!title && adMeta) title = adMeta.name;
+        
+        // Final fallback for missing data
+        if (!title) title = 'Anúncio sem título';
+        
         return { title, body, image, domain, type, cta };
     }, [creative, adMeta]);
 
