@@ -28,8 +28,13 @@ export const DashboardShareModal: React.FC<DashboardShareModalProps> = ({ isOpen
                 setShareUrl(url);
             } else {
                 setIsEnabled(false);
-                // Generate a new ID but don't save yet until user enables
-                const newId = crypto.randomUUID().slice(0, 12); 
+                
+                // For 'wk_demo', we use a static ID so the link works in Incognito/Cross-browser for demo purposes.
+                // For others, generate a random ID.
+                const newId = workspace.id === 'wk_demo' 
+                    ? 'demo_public_view' 
+                    : Math.random().toString(36).substring(2, 14);
+                
                 setShareId(newId);
                 setShareUrl(`${window.location.origin}/#/shared/dashboard/${newId}`);
             }

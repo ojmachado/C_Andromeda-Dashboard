@@ -22,14 +22,19 @@ export const SharedWorkspaceDashboard: React.FC = () => {
             setIsLoading(true);
             await new Promise(r => setTimeout(r, 1200)); // Simulate Loading
 
-            const wsId = shareId ? SecureKV.getWorkspaceIdByShareToken(shareId) : null;
-            if (wsId) {
+            // Check if it's the static demo ID (universal access)
+            if (shareId === 'demo_public_view') {
                 setIsValid(true);
-                // Here we would fetch actual workspace name/data. 
-                // For this demo, we simulate it based on ID existence.
-                setWorkspaceName("Alpha Team"); 
+                setWorkspaceName("Demo Store (Moda)");
             } else {
-                setIsValid(false);
+                // Otherwise check local storage
+                const wsId = shareId ? SecureKV.getWorkspaceIdByShareToken(shareId) : null;
+                if (wsId) {
+                    setIsValid(true);
+                    setWorkspaceName("Alpha Team"); 
+                } else {
+                    setIsValid(false);
+                }
             }
             setIsLoading(false);
         };
@@ -113,7 +118,7 @@ export const SharedWorkspaceDashboard: React.FC = () => {
                                 Live
                             </span>
                         </div>
-                        <h2 className="text-3xl md:text-4xl font-black text-white tracking-tight">Campanha Black Friday 2023</h2>
+                        <h2 className="text-3xl md:text-4xl font-black text-white tracking-tight">{workspaceName} - Black Friday</h2>
                         <p className="text-text-secondary text-base">Visão geral de desempenho de campanhas de conversão.</p>
                     </div>
                     <div className="flex flex-col items-end gap-1">
