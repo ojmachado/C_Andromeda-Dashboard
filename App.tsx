@@ -883,34 +883,50 @@ const App: React.FC = () => {
         }
     }, [navigate]);
 
-    // SDK Init
-    useEffect(() => {
-        const init = async () => {
-            const config = await SecureKV.getMetaConfig();
-            if(config?.appId) {
-                 window.fbAsyncInit = function() {
-                    window.FB.init({
-                      appId      : config.appId,
-                      cookie     : true,
-                      xfbml      : true,
-                      version    : 'v19.0'
-                    });
-                    setSdkReady(true);
-                  };
-                  // Load
-                  (function(d, s, id){
-                     var js, fjs = d.getElementsByTagName(s)[0];
-                     if (d.getElementById(id)) { return; }
-                     js = d.createElement(s) as HTMLScriptElement; js.id = id;
-                     js.src = "https://connect.facebook.net/en_US/sdk.js";
-                     fjs.parentNode!.insertBefore(js, fjs);
-                   }(document, 'script', 'facebook-jssdk'));
-            } else {
-                // If no config, set ready to true so we don't block UI that relies on it to show "Connect" button
-                setSdkReady(true); 
+    // FB SDK initialization logic
+    const initFB = async () => {
+        const config = await SecureKV.getMetaConfig();
+        
+        // Define fbAsyncInit globally
+        window.fbAsyncInit = function() {
+            if (config?.appId) {
+                window.FB.init({
+                    appId      : config.appId,
+                    cookie     : true,
+                    xfbml      : true,
+                    version    : 'v19.0'
+                });
+                console.log("FB SDK Initialized with App ID:", config.appId);
             }
+            setSdkReady(true);
         };
-        init();
+
+        // Load the script if not already loaded
+        if (!document.getElementById('facebook-jssdk')) {
+            const fjs = document.getElementsByTagName('script')[0];
+            const js = document.createElement('script') as HTMLScriptElement;
+            js.id = 'facebook-jssdk';
+            js.src = "https://connect.facebook.net/pt_BR/sdk.js";
+            fjs.parentNode!.insertBefore(js, fjs);
+        } else if (window.FB && config?.appId) {
+            // If already loaded but we have config, re-init
+            window.FB.init({
+                appId      : config.appId,
+                cookie     : true,
+                xfbml      : true,
+                version    : 'v19.0'
+            });
+            setSdkReady(true);
+        }
+    };
+
+    useEffect(() => {
+        initFB();
+
+        // Listen for system config changes (e.g. after user saves App ID)
+        const handleConfigChange = () => initFB();
+        window.addEventListener('sys_config_change', handleConfigChange);
+        return () => window.removeEventListener('sys_config_change', handleConfigChange);
     }, []);
 
     const handleCreateWorkspace = (name: string) => {

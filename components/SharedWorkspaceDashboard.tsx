@@ -1,14 +1,19 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
-import { SecureKV } from '../utils/kv';
-import { Button } from './UI';
+import { SecureKV, DASHBOARD_TEMPLATES } from '../utils/kv';
+import { KpiGrid, KpiCard, ChartContainer, DataTable } from './DashboardItems';
+import type { InsightData, DashboardTemplate, KpiConfig } from '../types';
 
 export const SharedWorkspaceDashboard: React.FC = () => {
     const { shareId } = useParams();
     const [isLoading, setIsLoading] = useState(true);
-    const [isValid, setIsValid] = useState(false);
+    const [error, setError] = useState<string | null>(null);
     const [workspaceName, setWorkspaceName] = useState('Workspace');
+    const [stats, setStats] = useState<any>(null);
+    const [campaigns, setCampaigns] = useState<InsightData[]>([]);
+    const [trendData, setTrendData] = useState<any[]>([]);
+    const [currentTemplate, setCurrentTemplate] = useState<DashboardTemplate>(DASHBOARD_TEMPLATES[0]);
 
     useEffect(() => {
         // Add meta tags
@@ -17,33 +22,236 @@ export const SharedWorkspaceDashboard: React.FC = () => {
         meta.content = "noindex, nofollow";
         document.head.appendChild(meta);
 
-        // Fetch Data Simulation
         const load = async () => {
             setIsLoading(true);
-            await new Promise(r => setTimeout(r, 1200)); // Simulate Loading
+            setError(null);
 
-            // Check if it's the static demo ID (universal access)
-            if (shareId === 'demo_public_view') {
-                setIsValid(true);
-                setWorkspaceName("Demo Store (Moda)");
-            } else {
-                // Otherwise check local storage
-                const wsId = shareId ? SecureKV.getWorkspaceIdByShareToken(shareId) : null;
-                if (wsId) {
-                    setIsValid(true);
-                    setWorkspaceName("Alpha Team"); 
-                } else {
-                    setIsValid(false);
-                }
+            // 1. Resolve Workspace ID
+            let wsId = shareId === 'demo_public_view' ? 'wk_demo' : null;
+            if (!wsId && shareId) {
+                wsId = SecureKV.getWorkspaceIdByShareToken(shareId);
             }
+
+            if (!wsId) {
+                setError("Link inválido ou expirado.");
+                setIsLoading(false);
+                return;
+            }
+
+            // 2. Get Workspace Info (Simulated since we don't have a full WS list here easily without passing props, 
+            // but we can try to find it in localStorage 'sys:workspaces' if we want the name)
+            const storedWorkspaces = localStorage.getItem('sys:workspaces');
+            const workspaces = storedWorkspaces ? JSON.parse(storedWorkspaces) : [];
+            const ws = workspaces.find((w: any) => w.id === wsId);
+            setWorkspaceName(ws ? ws.name : "Workspace Compartilhado");
+
+            // 3. Load Template Preference
+            const tpl = SecureKV.getWorkspaceTemplate(wsId);
+            setCurrentTemplate(tpl);
+
+            // 4. Data Fetching Strategy
+            if (wsId === 'wk_demo') {
+                await loadDemoData();
+            } else {
+                await loadRealData(wsId);
+            }
+            
             setIsLoading(false);
         };
+
         load();
 
         return () => {
-            document.head.removeChild(meta);
+            if (document.head.contains(meta)) document.head.removeChild(meta);
         };
     }, [shareId]);
+
+    const loadDemoData = async () => {
+        await new Promise(r => setTimeout(r, 800));
+        
+        setStats({
+            spend: 1249.73,
+            impressions: 82569,
+            clicks: 1240,
+            ctr: 2.35,
+            cpm: 14.26,
+            cpc: 0.60,
+            purchase_roas: [{ value: 3.8 }],
+            actions: [
+                { action_type: 'purchase', value: 24 },
+                { action_type: 'onsite_conversion.messaging_conversation_started_7d', value: 45 }
+            ]
+        });
+
+        const demoCampaigns: InsightData[] = [
+            { id: 'c1', name: '[LRM][TRAFEGO][PERFIL][CBO][NATAL]', status: 'ACTIVE', objective: 'OUTCOME_TRAFFIC', spend: 749.73, impressions: 52569, clicks: 800, ctr: 2.90, cpm: 14.0, cpc: 0.49, roas: 4.2, cpa: 12.50, messages: 32, costPerConversation: 23.42 },
+            { id: 'c2', name: '[INSTITUCIONAL][BRANDING][2024]', status: 'PAUSED', objective: 'OUTCOME_AWARENESS', spend: 299.23, impressions: 20569, clicks: 440, ctr: 2.1, cpm: 14.5, cpc: 0.68, roas: 1.5, cpa: 45.00, messages: 13, costPerConversation: 23.01 },
+            { id: 'c3', name: '[CONVERSAO][LAL 1%][COMPRADORES]', status: 'ACTIVE', objective: 'OUTCOME_SALES', spend: 500.00, impressions: 9500, clicks: 200, ctr: 2.1, cpm: 52.6, cpc: 2.50, roas: 5.5, cpa: 25.00, messages: 5, costPerConversation: 100 }
+        ];
+        setCampaigns(demoCampaigns);
+
+        const trend = Array.from({length: 15}, (_, i) => ({
+            date: new Date(Date.now() - (14-i) * 86400000).toLocaleDateString('pt-BR', {day: '2-digit', month: '2-digit'}),
+            spend: Math.random() * 200 + 50,
+            conversations: Math.floor(Math.random() * 20)
+        }));
+        setTrendData(trend);
+    };
+
+    const loadRealData = async (wsId: string) => {
+        // Check for Token & Context
+        const token = await SecureKV.getWorkspaceToken(wsId);
+        const context = SecureKV.getWorkspaceContext(wsId);
+
+        if (!token || !context?.adAccountId) {
+            setError("Não foi possível acessar os dados. O token de acesso pode ter expirado ou você não tem permissão para visualizar este workspace neste navegador.");
+            return;
+        }
+
+        if (!window.FB) {
+            // Simple wait for SDK
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            if (!window.FB) {
+                setError("Erro de conexão com o Facebook SDK.");
+                return;
+            }
+        }
+
+        const accountId = context.adAccountId;
+        const apiTimeParams = { date_preset: 'last_30d' };
+
+        try {
+            // 1. Overview
+            const statsReq = new Promise<any>(resolve => {
+                window.FB.api(`/${accountId}/insights`, { 
+                    access_token: token, 
+                    fields: 'spend,impressions,clicks,ctr,cpm,cpc,actions,purchase_roas',
+                    ...apiTimeParams
+                }, resolve);
+            });
+
+            // 2. Campaigns
+            const campaignsReq = new Promise<any>(resolve => {
+                window.FB.api(`/${accountId}/campaigns`, { 
+                    access_token: token, 
+                    fields: 'id,name,status,objective',
+                    limit: 50
+                }, (res: any) => {
+                    if (res.data) {
+                        // Fetch insights for campaigns
+                        window.FB.api(`/${accountId}/insights`, {
+                            access_token: token,
+                            level: 'campaign',
+                            fields: 'campaign_id,spend,impressions,clicks,ctr,cpm,cpc,actions,purchase_roas',
+                            ...apiTimeParams
+                        }, (insightsRes: any) => {
+                            const insightsMap = new Map();
+                            if (insightsRes.data) insightsRes.data.forEach((i: any) => insightsMap.set(i.campaign_id, i));
+                            
+                            const merged = res.data.map((c: any) => {
+                                const i: any = insightsMap.get(c.id) || {};
+                                const spend = parseFloat(i.spend || '0');
+                                const messages = i.actions?.find((a: any) => a.action_type.includes('messaging'))?.value || 0;
+                                const purchases = i.actions?.find((a: any) => a.action_type === 'purchase' || a.action_type.includes('purchase'))?.value || 0;
+                                
+                                return {
+                                    id: c.id,
+                                    name: c.name,
+                                    status: c.status,
+                                    objective: c.objective,
+                                    spend,
+                                    impressions: parseInt(i.impressions || '0'),
+                                    clicks: parseInt(i.clicks || '0'),
+                                    ctr: parseFloat(i.ctr || '0'),
+                                    cpm: parseFloat(i.cpm || '0'),
+                                    cpc: parseFloat(i.cpc || '0'),
+                                    roas: i.purchase_roas?.[0]?.value ? parseFloat(i.purchase_roas[0].value) : 0,
+                                    cpa: purchases > 0 ? spend / parseFloat(purchases) : 0,
+                                    messages: messages ? parseInt(messages) : 0,
+                                    costPerConversation: messages > 0 ? spend / parseFloat(messages) : 0
+                                };
+                            });
+                            resolve(merged);
+                        });
+                    } else {
+                        resolve([]);
+                    }
+                });
+            });
+
+            // 3. Trend
+            const trendReq = new Promise<any>(resolve => {
+                window.FB.api(`/${accountId}/insights`, { 
+                    access_token: token, 
+                    fields: 'spend,actions,date_start',
+                    time_increment: 1,
+                    ...apiTimeParams
+                }, (res: any) => {
+                    if (res.data) {
+                        const trend = res.data.map((d: any) => {
+                            const msgs = d.actions?.find((a: any) => a.action_type.includes('messaging'));
+                            return {
+                                date: new Date(d.date_start).toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'}),
+                                spend: parseFloat(d.spend || '0'),
+                                conversations: msgs ? parseFloat(msgs.value) : 0
+                            };
+                        }).reverse();
+                        resolve(trend);
+                    } else {
+                        resolve([]);
+                    }
+                });
+            });
+
+            const [statsData, campaignsData, trendDataResult] = await Promise.all([statsReq, campaignsReq, trendReq]);
+
+            if (statsData && !statsData.error && statsData.data?.[0]) {
+                setStats(statsData.data[0]);
+            }
+            if (Array.isArray(campaignsData)) setCampaigns(campaignsData);
+            if (Array.isArray(trendDataResult)) setTrendData(trendDataResult);
+
+        } catch (e) {
+            console.error(e);
+            setError("Erro ao carregar dados do Facebook.");
+        }
+    };
+
+    const getKpiValue = (config: KpiConfig) => {
+        if (!stats) return { value: '-', trend: undefined, sentiment: undefined };
+        
+        const val = (v: any) => typeof v === 'string' ? parseFloat(v) : (typeof v === 'number' ? v : 0);
+        let rawValue = 0;
+        let formattedValue = '-';
+
+        // Simplified extraction
+        switch (config.key) {
+            case 'spend': rawValue = val(stats.spend); formattedValue = rawValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); break;
+            case 'impressions': rawValue = val(stats.impressions); formattedValue = rawValue.toLocaleString('pt-BR'); break;
+            case 'clicks': rawValue = val(stats.clicks); formattedValue = rawValue.toLocaleString('pt-BR'); break;
+            case 'ctr': rawValue = val(stats.ctr); formattedValue = rawValue.toFixed(2) + '%'; break;
+            case 'cpc': rawValue = val(stats.cpc); formattedValue = rawValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); break;
+            case 'cpm': rawValue = val(stats.cpm); formattedValue = rawValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); break;
+            case 'roas': 
+                rawValue = stats.purchase_roas ? val(stats.purchase_roas[0]?.value) : 0; 
+                formattedValue = rawValue.toFixed(2) + 'x'; 
+                break;
+            case 'purchases':
+                const p = stats.actions?.find((a: any) => a.action_type.includes('purchase'));
+                rawValue = p ? val(p.value) : 0;
+                formattedValue = rawValue.toLocaleString('pt-BR');
+                break;
+            case 'cpa':
+                const pc = stats.actions?.find((a: any) => a.action_type.includes('purchase'))?.value;
+                rawValue = pc > 0 ? val(stats.spend) / val(pc) : 0;
+                formattedValue = rawValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+                break;
+            default:
+                formattedValue = '-';
+        }
+
+        return { value: formattedValue, trend: undefined, sentiment: undefined };
+    };
 
     if (isLoading) {
         return (
@@ -54,7 +262,7 @@ export const SharedWorkspaceDashboard: React.FC = () => {
         );
     }
 
-    if (!isValid) {
+    if (error) {
         return (
             <div className="min-h-screen bg-[#141122] flex items-center justify-center p-4">
                 <div className="max-w-md w-full bg-[#1e1b2e] border border-border-dark rounded-2xl p-8 flex flex-col items-center text-center shadow-2xl">
@@ -62,9 +270,7 @@ export const SharedWorkspaceDashboard: React.FC = () => {
                         <span className="material-symbols-outlined text-red-500 text-[32px]">link_off</span>
                     </div>
                     <h3 className="text-white text-xl font-bold mb-2">Dashboard indisponível</h3>
-                    <p className="text-text-secondary mb-8 leading-relaxed">
-                        O link que você tentou acessar expirou, não existe ou foi desativado pelo proprietário do workspace.
-                    </p>
+                    <p className="text-text-secondary mb-8 leading-relaxed text-sm">{error}</p>
                     <a className="w-full py-3 bg-primary text-white font-semibold rounded-lg hover:bg-primary-dark transition-colors" href="/#/login">
                         Ir para Andromeda Lab
                     </a>
@@ -73,10 +279,8 @@ export const SharedWorkspaceDashboard: React.FC = () => {
         );
     }
 
-    // Render High-Fidelity Mock for Shared Dashboard
     return (
         <div className="min-h-screen bg-[#141122] text-white font-display overflow-x-hidden flex flex-col">
-            {/* Navbar */}
             <nav className="w-full border-b border-border-dark bg-[#141122]/95 backdrop-blur-sm sticky top-0 z-50">
                 <div className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex items-center justify-between h-16">
@@ -97,9 +301,7 @@ export const SharedWorkspaceDashboard: React.FC = () => {
                 </div>
             </nav>
 
-            {/* Main Content */}
             <main className="flex-1 w-full max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-in fade-in duration-500">
-                {/* Header */}
                 <header className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
                     <div className="flex flex-col gap-2">
                         <div className="flex items-center gap-2 text-text-secondary text-sm font-medium mb-1">
@@ -118,177 +320,39 @@ export const SharedWorkspaceDashboard: React.FC = () => {
                                 Live
                             </span>
                         </div>
-                        <h2 className="text-3xl md:text-4xl font-black text-white tracking-tight">{workspaceName} - Black Friday</h2>
-                        <p className="text-text-secondary text-base">Visão geral de desempenho de campanhas de conversão.</p>
-                    </div>
-                    <div className="flex flex-col items-end gap-1">
-                        <div className="flex items-center gap-2 bg-[#1e1b2e] border border-border-dark rounded-lg px-3 py-2">
-                            <span className="material-symbols-outlined text-text-secondary text-[18px]">calendar_today</span>
-                            <span className="text-white text-sm font-medium">01 Nov - 30 Nov 2023</span>
-                        </div>
-                        <p className="text-xs text-text-secondary mt-1 text-right">Atualizado há 15 min</p>
+                        <h2 className="text-3xl md:text-4xl font-black text-white tracking-tight">{workspaceName}</h2>
+                        <p className="text-text-secondary text-base">Visualização de performance (Últimos 30 dias)</p>
                     </div>
                 </header>
 
-                {/* KPI Grid */}
-                <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-                    {[
-                        { label: 'Investimento Total', value: 'R$ 45.230,00', icon: 'payments', trend: '+15%', isGood: true },
-                        { label: 'ROAS (Retorno)', value: '4.2x', icon: 'ads_click', trend: '+0.5', isGood: true },
-                        { label: 'CPA Médio', value: 'R$ 18,50', icon: 'shopping_cart', trend: '-12%', isGood: true },
-                        { label: 'Conversões', value: '2.450', icon: 'group_add', trend: '+8%', isGood: true },
-                    ].map((kpi, i) => (
-                        <div key={i} className="bg-[#1e1b2e] border border-border-dark rounded-xl p-5 hover:border-primary/30 transition-colors group relative overflow-hidden">
-                            <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                                <span className="material-symbols-outlined text-white text-[48px]">{kpi.icon}</span>
-                            </div>
-                            <div className="flex flex-col gap-1 relative z-10">
-                                <p className="text-text-secondary text-sm font-medium">{kpi.label}</p>
-                                <p className="text-white text-2xl font-bold tracking-tight">{kpi.value}</p>
-                                <div className="flex items-center gap-1 mt-2">
-                                    <span className={`bg-${kpi.isGood ? 'emerald-500' : 'red-500'}/10 text-${kpi.isGood ? 'emerald-500' : 'red-500'} text-xs font-bold px-1.5 py-0.5 rounded flex items-center`}>
-                                        <span className="material-symbols-outlined text-[12px]">{kpi.isGood ? 'trending_up' : 'trending_down'}</span>
-                                        {kpi.trend}
-                                    </span>
-                                    <span className="text-text-secondary text-xs">vs mês anterior</span>
-                                </div>
-                            </div>
-                        </div>
-                    ))}
-                </section>
+                <KpiGrid>
+                    {currentTemplate.kpis.map((kpi: KpiConfig) => {
+                        const data = getKpiValue(kpi);
+                        return (
+                            <KpiCard 
+                                key={kpi.key}
+                                label={kpi.label} 
+                                value={data.value} 
+                                trend={data.trend}
+                                sentiment={data.sentiment}
+                                icon={kpi.icon}
+                            />
+                        );
+                    })}
+                </KpiGrid>
 
-                {/* Charts Section */}
-                <section className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-                    {/* Main Chart */}
-                    <div className="lg:col-span-2 bg-[#1e1b2e] border border-border-dark rounded-xl p-6 flex flex-col">
-                        <div className="flex justify-between items-start mb-6">
-                            <div>
-                                <h3 className="text-white text-lg font-bold">Evolução de Custos vs. Resultados</h3>
-                                <p className="text-text-secondary text-sm mt-1">Comparativo diário de investimento e vendas.</p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <span className="flex items-center gap-1.5 text-xs text-text-secondary">
-                                    <span className="w-2.5 h-2.5 rounded-full bg-primary"></span>
-                                    Resultados
-                                </span>
-                                <span className="flex items-center gap-1.5 text-xs text-text-secondary">
-                                    <span className="w-2.5 h-2.5 rounded-full bg-[#9b92c9]"></span>
-                                    Custo
-                                </span>
-                            </div>
-                        </div>
-                        {/* Chart SVG */}
-                        <div className="relative w-full h-[240px] mt-auto">
-                            <div className="absolute left-0 top-0 bottom-6 w-8 flex flex-col justify-between text-xs text-text-secondary font-medium">
-                                <span>4k</span><span>3k</span><span>2k</span><span>1k</span><span>0</span>
-                            </div>
-                            <div className="ml-10 h-full relative">
-                                <div className="absolute top-0 w-full border-t border-border-dark/50"></div>
-                                <div className="absolute top-1/4 w-full border-t border-border-dark/50"></div>
-                                <div className="absolute top-2/4 w-full border-t border-border-dark/50"></div>
-                                <div className="absolute top-3/4 w-full border-t border-border-dark/50"></div>
-                                <div className="absolute bottom-6 w-full border-t border-border-dark/50"></div>
-                                <svg className="absolute inset-0 h-[calc(100%-24px)] w-full overflow-visible" preserveAspectRatio="none">
-                                    <defs>
-                                        <linearGradient id="gradientPrimary" x1="0" x2="0" y1="0" y2="1">
-                                            <stop offset="0%" stopColor="#3713ec" stopOpacity="0.5"></stop>
-                                            <stop offset="100%" stopColor="#3713ec" stopOpacity="0"></stop>
-                                        </linearGradient>
-                                    </defs>
-                                    <path className="opacity-30" d="M0,180 C40,160 80,100 120,110 C160,120 200,60 240,50 C280,40 320,80 360,70 C400,60 440,20 480,30 C520,40 560,30 600,20 C640,10 680,40 720,30 C760,20 800,10 840,40 C880,70 920,50 960,60 L960,216 L0,216 Z" fill="url(#gradientPrimary)" stroke="none"></path>
-                                    <path d="M0,180 C40,160 80,100 120,110 C160,120 200,60 240,50 C280,40 320,80 360,70 C400,60 440,20 480,30 C520,40 560,30 600,20 C640,10 680,40 720,30 C760,20 800,10 840,40 C880,70 920,50 960,60" fill="none" stroke="#3713ec" strokeLinecap="round" strokeWidth="3"></path>
-                                    <path d="M0,150 C50,155 100,140 150,145 C200,150 250,130 300,120 C350,110 400,125 450,115 C500,105 550,90 600,85 C650,80 700,95 750,90 C800,85 850,70 900,75 C950,80 1000,70 1000,65" fill="none" stroke="#9b92c9" strokeDasharray="5,5" strokeLinecap="round" strokeWidth="2"></path>
-                                </svg>
-                                <div className="absolute bottom-0 w-full flex justify-between text-xs text-text-secondary font-medium pt-2">
-                                    <span>01 Nov</span><span>05 Nov</span><span>10 Nov</span><span>15 Nov</span><span>20 Nov</span><span>25 Nov</span><span>30 Nov</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                <div className="mt-8">
+                    <ChartContainer 
+                        title="Tendência de Investimento & Conversas" 
+                        data={trendData} 
+                        yAxisLabel="Investimento (BRL)"
+                    />
+                </div>
 
-                    {/* Secondary Stats / Funnel */}
-                    <div className="bg-[#1e1b2e] border border-border-dark rounded-xl p-6 flex flex-col gap-4">
-                        <h3 className="text-white text-lg font-bold mb-2">Funil de Conversão</h3>
-                        <div className="flex flex-col gap-4">
-                            {[
-                                { l: 'Impressões', v: '1.2M', w: '100%', c: 'bg-[#3713ec]' },
-                                { l: 'Cliques (CTR 1.8%)', v: '21.6K', w: '60%', c: 'bg-[#3713ec]/80' },
-                                { l: 'Checkout', v: '5.4K', w: '30%', c: 'bg-[#3713ec]/60' },
-                                { l: 'Compras', v: '2.4K', w: '15%', c: 'bg-[#0bda6c]' }
-                            ].map((step, i) => (
-                                <div key={i} className="relative">
-                                    <div className="flex justify-between items-end mb-1">
-                                        <span className="text-text-secondary text-sm">{step.l}</span>
-                                        <span className="text-white font-bold">{step.v}</span>
-                                    </div>
-                                    <div className="h-2 w-full bg-[#141122] rounded-full overflow-hidden">
-                                        <div className={`h-full ${step.c} rounded-full`} style={{ width: step.w }}></div>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                        <div className="mt-auto pt-4 border-t border-border-dark">
-                            <div className="flex justify-between items-center">
-                                <span className="text-text-secondary text-sm">Taxa de Conversão Global</span>
-                                <span className="text-[#0bda6c] text-xl font-bold">0.2%</span>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                {/* Detailed Table */}
-                <section className="flex flex-col gap-4">
-                    <h3 className="text-white text-xl font-bold">Detalhamento por Criativo</h3>
-                    <div className="overflow-hidden rounded-xl border border-border-dark bg-[#1e1b2e]">
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left text-sm whitespace-nowrap">
-                                <thead className="bg-[#292348] text-text-secondary uppercase text-xs font-semibold">
-                                    <tr>
-                                        <th className="px-6 py-4">Criativo</th>
-                                        <th className="px-6 py-4">Status</th>
-                                        <th className="px-6 py-4 text-right">Investimento</th>
-                                        <th className="px-6 py-4 text-right">ROAS</th>
-                                        <th className="px-6 py-4 text-right">Compras</th>
-                                        <th className="px-6 py-4 text-right">CPA</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-border-dark">
-                                    {[
-                                        { n: 'Video_BlackFriday_Promo_01', t: 'Feed Instagram', s: 'Ativo', i: 'R$ 12.450,00', r: '5.2x', c: '840', cpa: 'R$ 14,80', sc: 'bg-[#0bda6c]' },
-                                        { n: 'Img_Carrossel_Ofertas', t: 'Feed Facebook', s: 'Ativo', i: 'R$ 8.230,00', r: '3.8x', c: '410', cpa: 'R$ 20,05', sc: 'bg-[#0bda6c]' },
-                                        { n: 'Reels_Depoimento_Cliente', t: 'Reels', s: 'Aprendizado', i: 'R$ 2.100,00', r: '2.1x', c: '85', cpa: 'R$ 24,70', sc: 'bg-yellow-500' }
-                                    ].map((row, i) => (
-                                        <tr key={i} className="hover:bg-[#292348]/50 transition-colors">
-                                            <td className="px-6 py-4">
-                                                <div className="flex items-center gap-3">
-                                                    <div className={`h-10 w-10 rounded bg-gradient-to-br ${i === 0 ? 'from-purple-500 to-indigo-600' : i === 1 ? 'from-pink-500 to-orange-400' : 'from-blue-400 to-cyan-300'} flex-shrink-0`}></div>
-                                                    <div className="flex flex-col">
-                                                        <span className="text-white font-medium">{row.n}</span>
-                                                        <span className="text-xs text-text-secondary">{row.t}</span>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${row.sc}/10 ${row.sc === 'bg-[#0bda6c]' ? 'text-[#0bda6c]' : 'text-yellow-500'} border ${row.sc}/20`}>
-                                                    <span className={`w-1.5 h-1.5 rounded-full ${row.sc === 'bg-[#0bda6c]' ? 'bg-[#0bda6c]' : 'bg-yellow-500'}`}></span>
-                                                    {row.s}
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-4 text-right text-white">{row.i}</td>
-                                            <td className="px-6 py-4 text-right font-bold text-[#0bda6c]">{row.r}</td>
-                                            <td className="px-6 py-4 text-right text-white">{row.c}</td>
-                                            <td className="px-6 py-4 text-right text-white">{row.cpa}</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                        <div className="px-6 py-3 border-t border-border-dark flex justify-between items-center bg-[#1e1b2e]">
-                            <span className="text-xs text-text-secondary">Mostrando 3 de 12 criativos</span>
-                            <button className="text-xs font-medium text-primary hover:text-white transition-colors">Ver todos</button>
-                        </div>
-                    </div>
-                </section>
+                <div className="mt-8">
+                    <h3 className="text-xl font-bold text-white mb-4">Campanhas</h3>
+                    <DataTable data={campaigns} viewLevel="campaign" />
+                </div>
 
                 <footer className="mt-12 py-6 border-t border-border-dark flex flex-col items-center gap-2">
                     <div className="flex items-center gap-2 opacity-50">

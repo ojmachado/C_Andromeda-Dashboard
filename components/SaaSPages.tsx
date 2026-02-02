@@ -16,9 +16,13 @@ const AdminMetaSetup: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     const [webhookStatus, setWebhookStatus] = useState<'idle' | 'verifying' | 'verified'>('idle');
     const [testResult, setTestResult] = useState<{ type: 'success' | 'error', message: string } | null>(null);
     const [origin, setOrigin] = useState('');
+    const [hostname, setHostname] = useState('');
 
     useEffect(() => {
+        // Set URLs based on current environment
         setOrigin(window.location.origin);
+        setHostname(window.location.hostname);
+        
         const load = async () => {
             const c = await SecureKV.getMetaConfig();
             if (c) {
@@ -34,7 +38,7 @@ const AdminMetaSetup: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
     const handleSaveCredentials = async () => {
         await SecureKV.saveMetaConfig({ appId: config.appId, appSecret: config.appSecret });
-        // In a real app, show a toast here. For now, visual feedback is enough via the button state or next steps.
+        // Dispatch global event for App.tsx to catch and re-init SDK
         window.dispatchEvent(new Event('sys_config_change'));
     };
 
@@ -81,7 +85,6 @@ const AdminMetaSetup: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
     const copyToClipboard = (text: string) => {
         navigator.clipboard.writeText(text);
-        // Optional: show copied tooltip
     };
 
     return (
@@ -232,7 +235,7 @@ const AdminMetaSetup: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                                             className="w-full rounded-lg border border-[#3b3267] bg-[#141122]/50 text-text-secondary p-3 font-mono text-sm outline-none cursor-text" 
                                             readOnly 
                                             type="text" 
-                                            value={`${origin}/api/auth/callback/meta`} // Dynamically using current origin
+                                            value={`${origin}/api/auth/callback/meta`} 
                                         />
                                     </div>
                                     <button 
@@ -252,11 +255,11 @@ const AdminMetaSetup: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                                             className="w-full rounded-lg border border-[#3b3267] bg-[#141122]/50 text-text-secondary p-3 font-mono text-sm outline-none cursor-text" 
                                             readOnly 
                                             type="text" 
-                                            value={window.location.hostname} 
+                                            value={hostname || 'localhost'} 
                                         />
                                     </div>
                                     <button 
-                                        onClick={() => copyToClipboard(window.location.hostname)}
+                                        onClick={() => copyToClipboard(hostname || 'localhost')}
                                         className="flex items-center justify-center size-[46px] rounded-lg border border-[#3b3267] bg-[#141122] text-white hover:bg-[#3b3267] transition-colors group" 
                                         title="Copiar"
                                     >
@@ -772,6 +775,17 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ workspace, onUpdateWor
 
     const getToken = async () => SecureKV.getWorkspaceToken(workspace.id);
 
+    // Defined missing handlers for selecting business and account
+    const handleSelectBusiness = (id: string) => {
+        setSelectedBusinessId(id);
+        setCurrentStep(SetupStep.AdAccount);
+    };
+
+    const handleSelectAccount = (id: string) => {
+        setSelectedAdAccountId(id);
+        setCurrentStep(SetupStep.InsightsTest);
+    };
+
     // Effect for Steps 1 & 2 Loading
     useEffect(() => {
         const loadStepData = async () => {
@@ -859,13 +873,24 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ workspace, onUpdateWor
         loadStepData();
     }, [currentStep, sdkReady, selectedBusinessId, selectedAdAccountId, workspace.id]);
 
-    const handleLogin = () => {
-        if (!sdkReady || !window.FB) {
-            alert("Facebook SDK não inicializado. Verifique a página de Integrações ou desbloqueie popups.");
+    const handleLogin = async () => {
+        const config = await SecureKV.getMetaConfig();
+        
+        // 1. Check if FB App ID is configured globally
+        if (!config?.appId) {
+            setError("ERRO: Meta App ID não configurado. Vá na página de 'Integrações' e configure as chaves mestras da API primeiro.");
+            return;
+        }
+
+        // 2. Check if SDK is actually loaded
+        if (!window.FB) {
+            setError("O script do Facebook não pôde ser carregado. Verifique se há bloqueadores de anúncios ativos ou se permitiu popups.");
             return;
         }
 
         setIsLoading(true);
+        setError(null);
+        
         window.FB.login((response: any) => {
             setIsLoading(false);
             if (response.authResponse) {
@@ -877,19 +902,10 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ workspace, onUpdateWor
                 
                 setCurrentStep(SetupStep.Business);
             } else {
+                setError("Login cancelado ou não autorizado pelo usuário.");
                 console.log('User cancelled login or did not fully authorize.');
             }
         }, { scope: 'ads_read,read_insights,business_management' });
-    };
-
-    const handleSelectBusiness = (id: string) => {
-        setSelectedBusinessId(id);
-        setCurrentStep(SetupStep.AdAccount);
-    };
-
-    const handleSelectAccount = (id: string) => {
-        setSelectedAdAccountId(id);
-        setCurrentStep(SetupStep.InsightsTest);
     };
 
     return (
@@ -904,9 +920,20 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ workspace, onUpdateWor
 
                 <Card className="p-8 max-w-2xl mx-auto min-h-[400px] flex flex-col justify-center">
                     {error && (
-                        <div className="mb-4 p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center gap-3 text-red-400 text-sm">
-                            <span className="material-symbols-outlined">error</span>
-                            {error}
+                        <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex flex-col gap-3">
+                            <div className="flex items-center gap-3 text-red-400 text-sm font-bold">
+                                <span className="material-symbols-outlined">error</span>
+                                <span>Atenção</span>
+                            </div>
+                            <p className="text-red-400/80 text-sm leading-relaxed">{error}</p>
+                            {error.includes('Integrações') && (
+                                <button 
+                                    onClick={() => navigate('/integrations')}
+                                    className="mt-2 text-xs font-bold text-white bg-red-500 px-3 py-2 rounded-md hover:bg-red-600 transition-colors w-fit"
+                                >
+                                    Ir para Integrações
+                                </button>
+                            )}
                         </div>
                     )}
 
@@ -917,9 +944,15 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ workspace, onUpdateWor
                             </div>
                             <h3 className="text-xl font-bold text-white mb-4">Conectar com Meta Ads</h3>
                             <p className="text-sm text-text-secondary mb-8 max-w-sm mx-auto">
-                                Para importar campanhas e insights, precisamos de permissão para acessar sua conta de anúncios.
+                                Para importar campanhas e insights, precisamos de permissão para acessar sua conta de anúncios via API do Facebook.
                             </p>
-                            <Button onClick={handleLogin} isLoading={isLoading} className="w-full max-w-xs mx-auto">Continuar com Facebook</Button>
+                            <Button onClick={handleLogin} isLoading={isLoading} className="w-full max-w-xs mx-auto h-12 text-base">
+                                <svg className="w-5 h-5 mr-1" fill="currentColor" viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.791-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+                                Continuar com Facebook
+                            </Button>
+                            <p className="mt-6 text-[10px] text-text-secondary uppercase tracking-widest font-medium opacity-50">
+                                Conexão Segura SSL/TLS
+                            </p>
                         </div>
                     )}
 
