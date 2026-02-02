@@ -93,6 +93,7 @@ const DashboardPage = ({ workspaces, onUpdateWorkspace, sdkReady, isLoading }: {
   // Filter States
   const [dateRange, setDateRange] = useState<DateRangePreset>('last_30d');
   const [viewLevel, setViewLevel] = useState<ViewLevel>('campaign'); // Level Filter State
+  const [onlyActive, setOnlyActive] = useState(false); // NEW: Active Only Filter
   const [customDates, setCustomDates] = useState({ start: '', end: '' });
   const [isDateModalOpen, setIsDateModalOpen] = useState(false);
   const [tempCustomDates, setTempCustomDates] = useState({ start: '', end: '' });
@@ -105,11 +106,22 @@ const DashboardPage = ({ workspaces, onUpdateWorkspace, sdkReady, isLoading }: {
   // Request tracking to prevent race conditions
   const requestRef = useRef<number>(0);
 
-  // Filter Campaigns Logic
+  // Filter Campaigns Logic (Includes Status check)
   const filteredCampaigns = useMemo(() => {
-    if (selectedObjectives.length === 0) return campaigns;
-    return campaigns.filter(c => c.objective && selectedObjectives.includes(c.objective));
-  }, [campaigns, selectedObjectives]);
+    let list = [...campaigns];
+    
+    // Filter by Objectives
+    if (selectedObjectives.length > 0) {
+      list = list.filter(c => c.objective && selectedObjectives.includes(c.objective));
+    }
+    
+    // Filter by Status (Only Active)
+    if (onlyActive) {
+      list = list.filter(c => c.status === 'ACTIVE');
+    }
+    
+    return list;
+  }, [campaigns, selectedObjectives, onlyActive]);
 
   // Load Template Preference on Mount
   useEffect(() => {
@@ -687,6 +699,20 @@ const DashboardPage = ({ workspaces, onUpdateWorkspace, sdkReady, isLoading }: {
                             </div>
                         )}
                     </div>
+
+                    {/* NEW: Active Status Toggle */}
+                    <button 
+                        onClick={() => setOnlyActive(!onlyActive)}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-bold transition-all ${
+                            onlyActive 
+                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' 
+                            : 'bg-card-dark border-border-dark text-text-secondary hover:text-white hover:bg-white/5'
+                        }`}
+                        title={onlyActive ? "Mostrando apenas itens ativos" : "Mostrando todos os itens"}
+                    >
+                         <span className={`w-2 h-2 rounded-full ${onlyActive ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`}></span>
+                         {onlyActive ? 'Somente Ativos' : 'Todos os Status'}
+                    </button>
 
                     {/* Date Filters */}
                     <div className="bg-card-dark p-1 rounded-lg border border-border-dark flex items-center overflow-x-auto max-w-full">
