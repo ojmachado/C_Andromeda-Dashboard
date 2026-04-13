@@ -896,22 +896,49 @@ const SetupWizardWrapper = ({ workspaces, onUpdate, sdkReady }: { workspaces: Wo
 const App: React.FC = () => {
     const navigate = useNavigate();
     const [sdkReady, setSdkReady] = useState(false);
-    // Initialize workspaces from localStorage or default
-    const [workspaces, setWorkspaces] = useState<Workspace[]>(() => {
-        const stored = localStorage.getItem('sys:workspaces');
-        return stored ? JSON.parse(stored) : [
-            { id: 'wk_demo', name: 'Demo Store (Moda)', metaConnected: true }
-        ];
-    });
+    const [isLoadingAuth, setIsLoadingAuth] = useState(true);
+    const [session, setSession] = useState<any>(null);
+    const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+
+    useEffect(() => {
+        import('./lib/supabase').then(({ supabase }) => {
+            supabase.auth.getSession().then(({ data: { session } }) => {
+                setSession(session);
+                setIsLoadingAuth(false);
+            });
+
+            const { data: { subscription } } = supabase.auth.onAuthStateChange(
+                (_event, newSession) => {
+                    setSession(newSession);
+                }
+            );
+
+            return () => subscription.unsubscribe();
+        });
+    }, []);
+
+    useEffect(() => {
+        if (session) {
+            import('./services/workspaceService').then(({ workspaceService }) => {
+                workspaceService.list().then(list => {
+                    setWorkspaces(list.length ? list : [{ id: 'wk_demo', name: 'Demo Store (Moda)', metaConnected: true }]);
+                }).catch(e => console.error("Failed to load workspaces", e));
+            });
+        }
+    }, [session]);
 
     // Auth Check
     useEffect(() => {
-        const session = SecureKV.getSession();
+        if (isLoadingAuth) return;
         const path = window.location.hash.replace('#', '');
         if (!session && !path.startsWith('/shared/') && path !== '/login') {
             navigate('/login');
         }
-    }, [navigate]);
+    }, [session, isLoadingAuth, navigate]);
+
+    if (isLoadingAuth) {
+        return <div className="min-h-screen bg-background-light dark:bg-background-dark flex items-center justify-center text-white">Carregando Sessão...</div>;
+    }
 
     // FB SDK initialization logic
     const initFB = async () => {
@@ -959,21 +986,26 @@ const App: React.FC = () => {
         return () => window.removeEventListener('sys_config_change', handleConfigChange);
     }, []);
 
-    const handleCreateWorkspace = (name: string) => {
-        const newWs: Workspace = {
-            id: `wk_${Date.now()}`,
-            name,
-            metaConnected: false
-        };
-        const updated = [...workspaces, newWs];
-        setWorkspaces(updated);
-        localStorage.setItem('sys:workspaces', JSON.stringify(updated));
+    const handleCreateWorkspace = async (name: string) => {
+        try {
+            const { workspaceService } = await import('./services/workspaceService');
+            const newWs = await workspaceService.create(name);
+            setWorkspaces(w => [...w, newWs]);
+        } catch (e) {
+            console.error("Error creating workspace", e);
+        }
     };
 
-    const handleUpdateWorkspace = (ws: Workspace) => {
-        const updated = workspaces.map(w => w.id === ws.id ? ws : w);
-        setWorkspaces(updated);
-        localStorage.setItem('sys:workspaces', JSON.stringify(updated));
+    const handleUpdateWorkspace = async (ws: Workspace) => {
+        try {
+            if (ws.id !== 'wk_demo') {
+                const { workspaceService } = await import('./services/workspaceService');
+                await workspaceService.update(ws.id, ws);
+            }
+            setWorkspaces(current => current.map(w => w.id === ws.id ? ws : w));
+        } catch (e) {
+            console.error("Error updating workspace", e);
+        }
     };
 
     return (

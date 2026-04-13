@@ -135,12 +135,24 @@ const DEFAULT_REPORTS: CustomReport[] = [
 ];
 
 export const SecureKV = {
-  // Removed masterKey parameter
   saveMetaConfig: async (config: { appId: string; appSecret: string }) => {
+    try {
+      const { metaConfigService } = await import('../services/metaConfigService');
+      await metaConfigService.save(config.appId, config.appSecret);
+    } catch(e) {
+      console.warn("Failed to save to Supabase, falling back", e);
+    }
     localStorage.setItem(KEYS.META_CONFIG, JSON.stringify(config));
   },
 
   getMetaConfig: async () => {
+    try {
+      const { metaConfigService } = await import('../services/metaConfigService');
+      const appId = await metaConfigService.getAppId();
+      if (appId) return { appId, appSecret: 'SECRET_HIDDEN' };
+    } catch(e) {
+      // fallback
+    }
     const raw = localStorage.getItem(KEYS.META_CONFIG);
     if (!raw) return null;
     try {
@@ -151,10 +163,23 @@ export const SecureKV = {
   },
 
   saveWorkspaceToken: async (workspaceId: string, token: string) => {
+    try {
+      const { metaTokenService } = await import('../services/metaTokenService');
+      await metaTokenService.save(workspaceId, token);
+    } catch(e) {
+      console.warn("Fallback saveToken");
+    }
     localStorage.setItem(`${KEYS.TOKEN_PREFIX}${workspaceId}`, JSON.stringify({ accessToken: token }));
   },
 
   getWorkspaceToken: async (workspaceId: string) => {
+    try {
+      const { metaTokenService } = await import('../services/metaTokenService');
+      const t = await metaTokenService.get(workspaceId);
+      if (t) return t;
+    } catch(e) {
+      console.warn("Fallback getToken");
+    }
     const raw = localStorage.getItem(`${KEYS.TOKEN_PREFIX}${workspaceId}`);
     if (!raw) return null;
     try {
@@ -166,6 +191,10 @@ export const SecureKV = {
 
   saveWorkspaceContext: (workspaceId: string, data: { adAccountId?: string; businessId?: string }) => {
     localStorage.setItem(`${KEYS.CONTEXT_PREFIX}${workspaceId}`, JSON.stringify(data));
+    // Asynchronous background update to Supabase
+    import('../services/workspaceService').then(({ workspaceService }) => {
+      workspaceService.update(workspaceId, { adAccountId: data.adAccountId, businessId: data.businessId }).catch(() => {});
+    });
   },
 
   getWorkspaceContext: (workspaceId: string) => {
@@ -231,7 +260,21 @@ export const SecureKV = {
   },
 
   // Session Management
-  login: (email: string) => {
+  login: async (email: string, password?: string) => {
+    try {
+      const { supabase } = await import('../lib/supabase');
+      // For demo purposes, we do signUp if user doesn't exist, otherwise signIn
+      if (password) {
+          const { error } = await supabase.auth.signInWithPassword({ email, password });
+          if (error && error.message.includes('Invalid login credentials')) {
+              await supabase.auth.signUp({ email, password });
+          }
+      }
+    } catch(e) {
+      console.error(e);
+    }
+    
+    // Fallback or demo marker
     localStorage.setItem(KEYS.AUTH_SESSION, JSON.stringify({ 
       email, 
       isMaster: email === 'ojmachadomkt@gmail.com',
@@ -239,7 +282,11 @@ export const SecureKV = {
     }));
   },
 
-  logout: () => {
+  logout: async () => {
+    try {
+      const { supabase } = await import('../lib/supabase');
+      await supabase.auth.signOut();
+    } catch(e) {}
     localStorage.removeItem(KEYS.AUTH_SESSION);
   },
 
@@ -309,12 +356,24 @@ export const SecureKV = {
       }
       
       localStorage.setItem(`${KEYS.REPORTS_PREFIX}${workspaceId}`, JSON.stringify(reports));
+
+      // Background sync
+      import('../services/reportsService').then(({ reportsService }) => {
+          if (index >= 0) reportsService.update(report.id, report).catch(()=>{});
+          else reportsService.create(workspaceId, report).catch(()=>{});
+      }).catch(()=>{});
   },
+      
+
 
   deleteCustomReport: (workspaceId: string, reportId: string) => {
       const reports = SecureKV.getCustomReports(workspaceId);
       const filtered = reports.filter(r => r.id !== reportId);
       localStorage.setItem(`${KEYS.REPORTS_PREFIX}${workspaceId}`, JSON.stringify(filtered));
+
+      import('../services/reportsService').then(({ reportsService }) => {
+          reportsService.delete(reportId).catch(()=>{});
+      }).catch(()=>{});
   },
 
   // Simulate Global Lookup for Shared Reports
