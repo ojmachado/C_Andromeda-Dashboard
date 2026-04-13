@@ -445,15 +445,53 @@ export const AdDetailsPage = ({ workspaces, sdkReady, isLoading }: { workspaces:
                                         {creativeInfo.cta}
                                     </button>
                                 </div>
-                                <div className="p-3 flex items-center justify-between text-gray-500 dark:text-[#9b92c9] border-t border-gray-100 dark:border-[#292348]/50 bg-white dark:bg-[#1e1b2e]">
-                                    <div className="flex items-center gap-1 text-xs">
-                                        <span className="material-symbols-outlined text-[14px]">thumb_up</span> 
-                                        <span>--</span>
-                                    </div>
-                                    <div className="flex items-center gap-3 text-xs">
-                                        <span>-- Comments</span>
-                                        <span>-- Shares</span>
-                                    </div>
+                                <div className="p-3 flex items-center justify-between text-gray-500 dark:text-[#9b92c9] border-t border-gray-100 dark:border-[#292348]/50 bg-white dark:bg-[#1e1b2e] gap-2">
+                                    {/* Facebook link */}
+                                    {(adMeta?.effective_object_story_id || adMeta?.preview_shareable_link || creative?.instagram_permalink_url) ? (
+                                      <div className="flex items-center gap-2 w-full">
+                                        {(adMeta?.effective_object_story_id || adMeta?.preview_shareable_link) && (
+                                          <a
+                                            href={adMeta.effective_object_story_id
+                                              ? `https://www.facebook.com/${adMeta.effective_object_story_id}`
+                                              : adMeta.preview_shareable_link}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-[#1877F2]/10 border border-[#1877F2]/20 text-[#1877F2] hover:bg-[#1877F2] hover:text-white transition-all text-xs font-bold"
+                                          >
+                                            <svg className="w-4 h-4 shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                                              <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.791-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                                            </svg>
+                                            Ver no Facebook
+                                          </a>
+                                        )}
+                                        {(creative?.instagram_permalink_url || adMeta?.creative?.instagram_permalink_url) && (
+                                          <a
+                                            href={creative?.instagram_permalink_url || adMeta?.creative?.instagram_permalink_url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-pink-500/10 border border-pink-500/20 text-pink-400 hover:bg-pink-500 hover:text-white transition-all text-xs font-bold"
+                                          >
+                                            <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none">
+                                              <rect width="24" height="24" rx="6" fill="url(#ig_btn_detail)"/>
+                                              <circle cx="12" cy="12" r="4" stroke="white" strokeWidth="2"/>
+                                              <circle cx="18" cy="6" r="1.5" fill="white"/>
+                                              <defs>
+                                                <linearGradient id="ig_btn_detail" x1="2" y1="22" x2="22" y2="2" gradientUnits="userSpaceOnUse">
+                                                  <stop stopColor="#f09433"/><stop offset="0.25" stopColor="#e6683c"/>
+                                                  <stop offset="0.5" stopColor="#dc2743"/><stop offset="0.75" stopColor="#cc2366"/>
+                                                  <stop offset="1" stopColor="#bc1888"/>
+                                                </linearGradient>
+                                              </defs>
+                                            </svg>
+                                            Ver no Instagram
+                                          </a>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <p className="text-xs text-gray-400 dark:text-[#9b92c9] italic w-full text-center py-1">
+                                        Links do criativo não disponíveis
+                                      </p>
+                                    )}
                                 </div>
                             </div>
                         </div>

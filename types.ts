@@ -72,6 +72,7 @@ export interface InsightData {
   adPreviewLink?: string;
   fbLink?: string; // New: Direct Facebook Post Link
   igLink?: string; // New: Direct Instagram Post Link
+  thumbnailUrl?: string;   // Thumbnail URL for ad creative preview in table
   detailsLink?: string;
   spend: number;
   impressions: number;
