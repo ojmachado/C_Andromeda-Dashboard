@@ -313,71 +313,6 @@ export const ChartContainer: React.FC<{ title: string; data?: ChartDataPoint[]; 
 type SortKey = keyof InsightData;
 type SortDirection = 'asc' | 'desc';
 
-// --- Ad Thumbnail component for the ad-level DataTable ---
-const AdThumbnail: React.FC<{ src?: string; fbLink?: string; igLink?: string; name: string }> = ({ src, fbLink, igLink, name }) => {
-  const [imgError, setImgError] = React.useState(false);
-
-  return (
-    <div className="relative group/thumb w-10 h-10 rounded-lg overflow-hidden border border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-white/5 shrink-0 flex items-center justify-center">
-      {src && !imgError ? (
-        <img
-          src={src}
-          alt={name}
-          className="w-full h-full object-cover"
-          referrerPolicy="no-referrer"
-          onError={() => setImgError(true)}
-        />
-      ) : (
-        <span className="material-symbols-outlined text-slate-400 text-[18px]">image</span>
-      )}
-
-      {/* Hover overlay — shows FB / IG links */}
-      {(fbLink || igLink) && (
-        <div className="absolute inset-0 bg-black/70 opacity-0 group-hover/thumb:opacity-100 transition-opacity flex items-center justify-center gap-1">
-          {fbLink && (
-            <a
-              href={fbLink}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              title="Abrir no Facebook"
-              className="text-[#1877F2] hover:text-white transition-colors"
-            >
-              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.791-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
-              </svg>
-            </a>
-          )}
-          {igLink && (
-            <a
-              href={igLink}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              title="Abrir no Instagram"
-              className="hover:opacity-80 transition-opacity"
-            >
-              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none">
-                <rect width="24" height="24" rx="6" fill="url(#ig_thumb_grad)"/>
-                <circle cx="12" cy="12" r="4" stroke="white" strokeWidth="2"/>
-                <circle cx="18" cy="6" r="1.5" fill="white"/>
-                <defs>
-                  <linearGradient id="ig_thumb_grad" x1="2" y1="22" x2="22" y2="2" gradientUnits="userSpaceOnUse">
-                    <stop stopColor="#f09433"/><stop offset="0.25" stopColor="#e6683c"/>
-                    <stop offset="0.5" stopColor="#dc2743"/><stop offset="0.75" stopColor="#cc2366"/>
-                    <stop offset="1" stopColor="#bc1888"/>
-                  </linearGradient>
-                </defs>
-              </svg>
-            </a>
-          )}
-        </div>
-      )}
-    </div>
-  );
-};
-
-
 export const DataTable: React.FC<{ data: InsightData[]; isLoading?: boolean; viewLevel?: 'campaign' | 'adset' | 'ad' }> = ({ data, isLoading, viewLevel = 'campaign' }) => {
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({ key: 'spend', direction: 'desc' });
 
@@ -410,8 +345,6 @@ export const DataTable: React.FC<{ data: InsightData[]; isLoading?: boolean; vie
   };
 
   const headers = [
-      // Thumbnail column — only for ads
-      ...(viewLevel === 'ad' ? [{ key: 'thumbnail', label: '' }] : []),
       { key: 'name', label: viewLevel === 'campaign' ? 'Campanha' : viewLevel === 'adset' ? 'Conjunto' : 'Anúncio' },
       { key: 'status', label: 'Status' },
       // FB/IG Columns only for ads
@@ -484,18 +417,6 @@ export const DataTable: React.FC<{ data: InsightData[]; isLoading?: boolean; vie
           ) : (
             sortedData.map((row, i) => (
               <tr key={i} className="border-b border-slate-100 dark:border-white/5 last:border-0 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors group">
-                {/* Thumbnail cell — ads only */}
-                {viewLevel === 'ad' && (
-                  <td className="pl-4 pr-2 py-3 w-[52px]">
-                    {row.adPreviewLink ? (
-                      <a href={row.detailsLink || row.adPreviewLink} target="_blank" rel="noopener noreferrer" className="block">
-                        <AdThumbnail src={row.thumbnailUrl} fbLink={row.fbLink} igLink={row.igLink} name={row.name} />
-                      </a>
-                    ) : (
-                      <AdThumbnail src={row.thumbnailUrl} fbLink={row.fbLink} igLink={row.igLink} name={row.name} />
-                    )}
-                  </td>
-                )}
                 <td className="px-6 py-4 text-sm truncate max-w-[280px]" title={row.name}>
                     {/* Primary: Name linked to Details */}
                     {row.detailsLink ? (
